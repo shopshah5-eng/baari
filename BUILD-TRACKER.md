@@ -9,9 +9,10 @@ Platform: Google Antigravity / Monorepo
 
 - **GitHub Repository**: [https://github.com/shopshah5-eng/baari](https://github.com/shopshah5-eng/baari)
 - **Vercel Production URL**: [https://baari-inky.vercel.app](https://baari-inky.vercel.app)
-- **Direct Deployment URL**: [https://baari-2ozqce635-taj-s-projects1.vercel.app](https://baari-2ozqce635-taj-s-projects1.vercel.app)
+- **Latest Deployment**: [https://baari-phm03q4xb-taj-s-projects1.vercel.app](https://baari-phm03q4xb-taj-s-projects1.vercel.app)
+- **Deployment Security Audit**: `node scripts/audit-deploy.js` → **13 passed · 0 warnings · 0 critical** (100% Green)
 - **Engine Local Endpoint**: `http://localhost:3000` (API v2 at `/api/v2`)
-- **Web Local Endpoint**: `http://localhost:3001` (Next.js 15.3.9 App Router)
+- **Web Local Endpoint**: `http://localhost:3001` (Next.js 15.3.9 App Router, 23 routes)
 
 ---
 
