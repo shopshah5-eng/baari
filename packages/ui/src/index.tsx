@@ -1,6 +1,7 @@
 import React from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { AlertCircle, RotateCcw } from 'lucide-react';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -8,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // ── Button ──────────────────────────────────────────────────────────────────
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'success';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'success' | 'outline';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -18,6 +19,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const variants = {
       primary: 'bg-primary text-white hover:bg-primary-hover shadow-minimal',
       secondary: 'bg-white text-dark border border-border hover:bg-bg-inset shadow-minimal',
+      outline: 'bg-white text-dark border border-border hover:bg-bg-inset shadow-minimal',
       ghost: 'bg-transparent text-muted hover:text-dark hover:bg-bg-inset',
       destructive: 'bg-danger-light text-danger border border-danger/20 hover:bg-danger/10',
       success: 'bg-success text-white hover:bg-success/90 shadow-minimal'
@@ -89,3 +91,53 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
 );
 Input.displayName = 'Input';
 
+// ── ErrorState ──────────────────────────────────────────────────────────────
+export interface ErrorStateProps {
+  title?: string;
+  message?: string;
+  endpoint?: string;
+  onRetry?: () => void;
+  retrying?: boolean;
+}
+
+export function ErrorState({
+  title = 'Service Unavailable',
+  message = 'Unable to reach the Baari engine backend. Showing honest error state instead of simulated data.',
+  endpoint,
+  onRetry,
+  retrying = false
+}: ErrorStateProps) {
+  return (
+    <Card className="p-8 max-w-lg mx-auto text-center space-y-4 border-dashed border-border bg-white shadow-minimal my-8">
+      <div className="w-12 h-12 rounded-full bg-danger-light text-danger mx-auto flex items-center justify-center">
+        <AlertCircle className="w-6 h-6" />
+      </div>
+
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-dark">{title}</h3>
+        <p className="text-xs text-muted max-w-sm mx-auto leading-relaxed">{message}</p>
+      </div>
+
+      {endpoint && (
+        <div className="py-1 px-2.5 rounded-[6px] bg-bg-inset border border-border inline-block text-[11px] font-mono text-muted">
+          Endpoint: {endpoint}
+        </div>
+      )}
+
+      {onRetry && (
+        <div className="pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={retrying}
+            className="text-xs"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${retrying ? 'animate-spin' : ''}`} />
+            {retrying ? 'Connecting...' : 'Retry Connection'}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}

@@ -243,3 +243,4 @@ You are done with the build when all seven are true:
 5. The five alarms have fired at least once in staging.
 6. One real clinic has run a full day on it without calling you.
 7. A second person could take over from `AGENTS.md` + `BUILD-TRACKER.md` alone.
+

@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, UserCheck, Tv, MessageSquare,
-  Star, CreditCard, ChevronDown, CheckCircle2, AlertCircle
+  Star, CreditCard, ChevronDown, CheckCircle2, AlertCircle, LogOut
 } from 'lucide-react';
 import { Badge } from '@baari/ui';
 
@@ -15,15 +15,66 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [tenant, setTenant] = useState('dr-sharma');
-  const [waConnected, setWaConnected] = useState(true);
+  const router = useRouter();
+
+  const [tenantName, setTenantName] = useState('Dr Sharma Dental');
+  const [tenantInfo, setTenantInfo] = useState('Clinic · 3 Doctors');
+  const [waConnected, setWaConnected] = useState(false);
+  const [isQuietHours, setIsQuietHours] = useState(false);
+
+  // Derive quiet hours from actual Indian Standard Time (IST)
+  useEffect(() => {
+    const checkQuietHours = () => {
+      try {
+        const istHour = Number(
+          new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false })
+        );
+        setIsQuietHours(istHour >= 21 || istHour < 8);
+      } catch {
+        setIsQuietHours(false);
+      }
+    };
+    checkQuietHours();
+    const timer = setInterval(checkQuietHours, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch real tenant info & WhatsApp connection state
+  useEffect(() => {
+    fetch('/engine-api/wa/status')
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        if (d && d.status === 'connected') {
+          setWaConnected(true);
+        } else {
+          setWaConnected(false);
+        }
+      })
+      .catch(() => setWaConnected(false));
+
+    fetch('/api/tenant')
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        if (d && d.tenant) {
+          setTenantName(d.tenant.name);
+          setTenantInfo(`${d.tenant.mode.toUpperCase()} · ${d.tenant.area || 'Model Town'}`);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
+  };
 
   // Exactly 8 sidebar items per §3
   const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/desk', label: 'Reception Desk', icon: Users, badge: 'Live' },
     { href: '/cabin', label: 'Doctor Cabin', icon: UserCheck },
-    { href: '/tv/preview', label: 'Waiting TV', icon: Tv },
+    { href: '/tv/display-default', label: 'Waiting TV', icon: Tv },
     { href: '/patients', label: 'Patients', icon: Users },
     { href: '/whatsapp', label: 'WhatsApp', icon: MessageSquare, statusDot: waConnected },
     { href: '/reviews', label: 'Reviews', icon: Star },
@@ -46,10 +97,9 @@ export default function DashboardLayout({
 
             <div className="p-2 rounded-[8px] bg-bg-inset border border-border flex items-center justify-between">
               <div className="truncate">
-                <div className="text-xs font-semibold text-dark truncate">Dr Sharma Dental</div>
-                <div className="text-[11px] text-muted">Clinic · 3 Doctors</div>
+                <div className="text-xs font-semibold text-dark truncate">{tenantName}</div>
+                <div className="text-[11px] text-muted">{tenantInfo}</div>
               </div>
-              <ChevronDown className="w-4 h-4 text-muted shrink-0" />
             </div>
           </div>
 
@@ -57,7 +107,7 @@ export default function DashboardLayout({
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.href === '/' && pathname === '/');
               return (
                 <Link
                   key={item.href}
@@ -78,7 +128,7 @@ export default function DashboardLayout({
                     </span>
                   )}
                   {item.statusDot !== undefined && (
-                    <span className={`w-2 h-2 rounded-full ${item.statusDot ? 'bg-success' : 'bg-warning'}`} />
+                    <span className={`w-2 h-2 rounded-full ${item.statusDot ? 'bg-success' : 'bg-gray-300'}`} />
                   )}
                 </Link>
               );
@@ -86,17 +136,24 @@ export default function DashboardLayout({
           </nav>
         </div>
 
-        {/* Footer info: WhatsApp Health Indicator */}
+        {/* Footer info: WhatsApp Health Indicator — Honest Status (§4) */}
         <div className="p-4 border-t border-border space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted">WhatsApp lane</span>
-            <span className="inline-flex items-center gap-1.5 text-success font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              Connected
-            </span>
+            {waConnected ? (
+              <span className="inline-flex items-center gap-1.5 text-success font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                Connected
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-muted font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                Not Connected
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-muted">
-            Quiet hours active: 21:00–08:00 IST
+            {isQuietHours ? '🌙 Quiet hours active: 21:00–08:00 IST' : '☀️ Day hours active'}
           </div>
         </div>
       </aside>
@@ -107,8 +164,16 @@ export default function DashboardLayout({
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">Aapki baari, WhatsApp par</span>
           </div>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-4 text-xs">
             <span className="text-muted">Receptionist PIN Scoped</span>
+            <button
+              onClick={handleLogout}
+              className="text-muted hover:text-dark flex items-center gap-1 text-xs"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
             <span className="w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center font-bold text-xs">
               RS
             </span>
@@ -122,4 +187,3 @@ export default function DashboardLayout({
     </div>
   );
 }
-

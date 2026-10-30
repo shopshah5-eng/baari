@@ -2,20 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Input, Card, Badge } from '@baari/ui';
-import { getLabels, OrgMode } from '@baari/shared';
+import { Card, Button, Input, Badge } from '@baari/ui';
 import {
-  CheckCircle2, ArrowRight, ArrowLeft, Upload, Globe,
-  FileText, Sparkles, AlertCircle, Building2, Clock, Users, DollarSign
+  ArrowRight, ArrowLeft, CheckCircle2, Upload, Globe,
+  MapPin, Plus, Trash2, Sparkles, Building2, AlertCircle
 } from 'lucide-react';
-
-interface ExtractedData {
-  name: string;
-  area: string;
-  providers: { name: string; specialty: string; avgMinutes: number }[];
-  hours: string;
-  services: { name: string; price: number; duration: number }[];
-}
+import { OrgMode, getLabels } from '@baari/shared';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -23,6 +15,7 @@ export default function OnboardingPage() {
   const [mode, setMode] = useState<OrgMode>('clinic');
   const [businessName, setBusinessName] = useState('Dr Sharma Dental');
   const [area, setArea] = useState('Model Town, Ludhiana');
+  const [phone, setPhone] = useState('919810000001');
   const [providers, setProviders] = useState([
     { name: 'Dr. Sharma', specialty: 'Dental Surgeon', avgMinutes: 12 },
     { name: 'Dr. Kaur', specialty: 'Skin & Aesthetics', avgMinutes: 8 }
@@ -34,25 +27,52 @@ export default function OnboardingPage() {
     { name: 'Root Canal Treatment (RCT)', price: 4500, duration: 45 }
   ]);
 
-  // Import method states
-  const [importTab, setImportTab] = useState<'upload' | 'website' | 'gbp' | 'manual'>('upload');
   const [websiteUrl, setWebsiteUrl] = useState('');
-  const [fileImportStatus, setFileImportStatus] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const labels = getLabels(mode);
   const totalSteps = 6;
   const progressPercent = Math.min(100, Math.round(((step + 1) / totalSteps) * 100));
 
-  const handleSimulatedFileUpload = (filename: string) => {
-    setFileImportStatus(`Reading ${filename}... extracting ${labels.providers.toLowerCase()} and ${labels.money.toLowerCase()}...`);
-    setTimeout(() => {
-      setFileImportStatus(`✅ Extracted 2 ${labels.providers.toLowerCase()} and 3 services from ${filename} with 95% confidence.`);
-    }, 1000);
-  };
+  const handleFinishOnboarding = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
 
-  const handleFinishOnboarding = () => {
-    router.push('/');
+    try {
+      const res = await fetch('/engine-api/onboarding/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          name: businessName,
+          area,
+          phone,
+          hours,
+          providers,
+          services,
+          websiteUrl: websiteUrl || null
+        })
+      });
+
+      // Also set the session cookie via login route
+      await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          authMode: 'password',
+          email: 'doctor@clinic.com',
+          password: 'password123'
+        })
+      });
+
+      router.push('/');
+      router.refresh();
+    } catch (err: any) {
+      setSubmitError(err.message || 'Setup submission failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -61,7 +81,9 @@ export default function OnboardingPage() {
       <div className="max-w-xl w-full mx-auto space-y-4">
         <div className="flex justify-between items-center text-xs font-medium text-muted">
           <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-[6px] bg-primary text-white flex items-center justify-center font-bold text-[11px]">ब</span>
+            <span className="w-5 h-5 rounded-[6px] bg-primary text-white flex items-center justify-center font-bold text-[11px]">
+              ब
+            </span>
             <span className="text-dark font-semibold">Baari Smart Setup</span>
           </div>
           <span>Step {step + 1} of {totalSteps}</span>
@@ -76,11 +98,19 @@ export default function OnboardingPage() {
 
       {/* Main Guided Question Area */}
       <div className="max-w-xl w-full mx-auto my-auto py-8">
+        {submitError && (
+          <div className="mb-4 p-3 bg-danger-light border border-danger/20 rounded-[8px] flex items-center gap-2 text-xs text-danger">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{submitError}</span>
+          </div>
+        )}
+
+        {/* Step 0: Mode Selection */}
         {step === 0 && (
           <div className="space-y-6">
             <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-bold text-dark">What kind of business are you setting up?</h2>
-              <p className="text-sm text-muted">This configures all labels and workflows automatically.</p>
+              <h1 className="text-2xl font-bold text-dark">What kind of business are you setting up?</h1>
+              <p className="text-sm text-muted">This configures all labels, queues, and workflows automatically.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -94,7 +124,11 @@ export default function OnboardingPage() {
                 <button
                   key={item.id}
                   onClick={() => setMode(item.id as OrgMode)}
-                  className={`p-4 rounded-[12px] border text-left transition-all space-y-1.5 ${mode === item.id ? 'border-primary bg-primary-light ring-2 ring-primary ring-offset-1' : 'border-border bg-white hover:border-muted'}`}
+                  className={`p-4 rounded-[12px] border text-left transition-all space-y-1.5 ${
+                    mode === item.id
+                      ? 'border-primary bg-primary-light ring-2 ring-primary ring-offset-1'
+                      : 'border-border bg-white hover:border-muted'
+                  }`}
                 >
                   <div className="text-2xl">{item.icon}</div>
                   <div className="font-semibold text-sm text-dark">{item.title}</div>
@@ -105,44 +139,58 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {/* Step 1: Business Identity */}
         {step === 1 && (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-dark">Business basics</h2>
-              <p className="text-sm text-muted">How patients will recognise your practice.</p>
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-bold text-dark">What is your {labels.modeName.toLowerCase()} name?</h2>
+              <p className="text-sm text-muted">This will appear on patient WhatsApp messages and TV screens.</p>
             </div>
 
-            <Card className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-dark">{labels.modeName} Name</label>
+            <Card className="space-y-4 p-6 bg-white shadow-minimal">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-dark">Business / Clinic Name</label>
                 <Input
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="e.g. Dr Sharma Dental"
+                  placeholder="e.g. Dr Sharma Dental Clinic"
+                  required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-dark">Area & City</label>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-dark">Locality / Area & City</label>
                 <Input
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
                   placeholder="e.g. Model Town, Ludhiana"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-dark">WhatsApp Contact Phone</label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 919810000001"
+                  required
                 />
               </div>
             </Card>
           </div>
         )}
 
+        {/* Step 2: Providers */}
         {step === 2 && (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-dark">{labels.providers} and operating hours</h2>
-              <p className="text-sm text-muted">Each {labels.provider.toLowerCase()} gets their own independent queue and learned timing.</p>
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-bold text-dark">Who attends to {labels.customers.toLowerCase()}?</h2>
+              <p className="text-sm text-muted">Tokens are assigned per {labels.provider.toLowerCase()} with isolated queues.</p>
             </div>
 
-            <Card className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-dark">{labels.providers}</label>
+            <Card className="space-y-4 p-6 bg-white shadow-minimal">
+              <div className="space-y-3">
                 {providers.map((p, idx) => (
                   <div key={idx} className="flex gap-2 items-center">
                     <Input
@@ -152,6 +200,7 @@ export default function OnboardingPage() {
                         next[idx].name = e.target.value;
                         setProviders(next);
                       }}
+                      placeholder="Doctor Name"
                       className="flex-1"
                     />
                     <Input
@@ -161,57 +210,77 @@ export default function OnboardingPage() {
                         next[idx].specialty = e.target.value;
                         setProviders(next);
                       }}
-                      className="flex-1"
+                      placeholder="Specialty"
+                      className="w-36"
                     />
-                    <div className="w-24 flex items-center gap-1 text-xs text-muted">
-                      <Input
-                        type="number"
-                        value={p.avgMinutes}
-                        onChange={(e) => {
-                          const next = [...providers];
-                          next[idx].avgMinutes = Number(e.target.value);
-                          setProviders(next);
-                        }}
-                      />
-                      <span>min</span>
-                    </div>
+                    {providers.length > 1 && (
+                      <button
+                        onClick={() => setProviders(providers.filter((_, i) => i !== idx))}
+                        className="text-muted hover:text-danger p-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-1 pt-2 border-t border-border">
-                <label className="text-xs font-medium text-dark">Weekly Timings</label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setProviders([...providers, { name: '', specialty: '', avgMinutes: 10 }])}
+                className="w-full text-xs"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add Another {labels.provider}
+              </Button>
+            </Card>
+          </div>
+        )}
+
+        {/* Step 3: Hours */}
+        {step === 3 && (
+          <div className="space-y-6">
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-bold text-dark">What are your operating hours?</h2>
+              <p className="text-sm text-muted">The WhatsApp bot uses these hours to accept bookings and answer questions.</p>
+            </div>
+
+            <Card className="space-y-4 p-6 bg-white shadow-minimal">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-dark">Working Hours</label>
                 <Input
                   value={hours}
                   onChange={(e) => setHours(e.target.value)}
-                  placeholder="10:00 AM – 2:00 PM, 5:00 PM – 8:00 PM"
+                  placeholder="e.g. 10:00 AM – 2:00 PM, 5:00 PM – 8:00 PM (Sunday closed)"
                 />
               </div>
             </Card>
           </div>
         )}
 
-        {step === 3 && (
+        {/* Step 4: Top Services */}
+        {step === 4 && (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-dark">Services & pricing</h2>
-              <p className="text-sm text-muted">Service duration feeds directly into queue travel and wait estimates.</p>
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-bold text-dark">Top Services & Standard Fees</h2>
+              <p className="text-sm text-muted">Grounded knowledge: the bot will never fabricate a price not on this list.</p>
             </div>
 
-            <Card className="space-y-3">
-              {services.map((s, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <Input
-                    value={s.name}
-                    onChange={(e) => {
-                      const next = [...services];
-                      next[idx].name = e.target.value;
-                      setServices(next);
-                    }}
-                    className="flex-1"
-                  />
-                  <div className="w-28 flex items-center gap-1 text-xs">
-                    <span>₹</span>
+            <Card className="space-y-4 p-6 bg-white shadow-minimal">
+              <div className="space-y-3">
+                {services.map((s, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      value={s.name}
+                      onChange={(e) => {
+                        const next = [...services];
+                        next[idx].name = e.target.value;
+                        setServices(next);
+                      }}
+                      placeholder="Service name"
+                      className="flex-1"
+                    />
                     <Input
                       type="number"
                       value={s.price}
@@ -220,172 +289,85 @@ export default function OnboardingPage() {
                         next[idx].price = Number(e.target.value);
                         setServices(next);
                       }}
+                      placeholder="Price (₹)"
+                      className="w-24"
                     />
+                    {services.length > 1 && (
+                      <button
+                        onClick={() => setServices(services.filter((_, i) => i !== idx))}
+                        className="text-muted hover:text-danger p-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  <div className="w-24 flex items-center gap-1 text-xs text-muted">
-                    <Input
-                      type="number"
-                      value={s.duration}
-                      onChange={(e) => {
-                        const next = [...services];
-                        next[idx].duration = Number(e.target.value);
-                        setServices(next);
-                      }}
-                    />
-                    <span>min</span>
-                  </div>
-                </div>
-              ))}
-            </Card>
-          </div>
-        )}
-
-        {step === 4 && (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-dark">Teach Baari about your business</h2>
-              <p className="text-sm text-muted">Import your price lists, documents, or website to enrich the WhatsApp assistant.</p>
-            </div>
-
-            <Card className="space-y-4">
-              <div className="flex border-b border-border pb-3 text-xs font-medium">
-                <button
-                  onClick={() => setImportTab('upload')}
-                  className={`flex-1 py-1 text-center rounded-[6px] ${importTab === 'upload' ? 'bg-primary-light text-primary font-semibold' : 'text-muted'}`}
-                >
-                  PDF / Excel / Image
-                </button>
-                <button
-                  onClick={() => setImportTab('website')}
-                  className={`flex-1 py-1 text-center rounded-[6px] ${importTab === 'website' ? 'bg-primary-light text-primary font-semibold' : 'text-muted'}`}
-                >
-                  Website
-                </button>
-                <button
-                  onClick={() => setImportTab('gbp')}
-                  className={`flex-1 py-1 text-center rounded-[6px] ${importTab === 'gbp' ? 'bg-primary-light text-primary font-semibold' : 'text-muted'}`}
-                >
-                  Google Profile
-                </button>
+                ))}
               </div>
 
-              {importTab === 'upload' && (
-                <div className="border-2 border-dashed border-border rounded-[12px] p-6 text-center space-y-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-light text-primary flex items-center justify-center mx-auto">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-dark">Upload PDF price list, rate card or photo</p>
-                    <p className="text-[11px] text-muted">Supports PDF, Excel, Word, or photo of clinic board</p>
-                  </div>
-                  <div className="flex justify-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleSimulatedFileUpload('Dental_Price_List_2026.pdf')}
-                    >
-                      Choose PDF
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleSimulatedFileUpload('Clinic_Board_Photo.jpg')}
-                    >
-                      Upload Board Photo
-                    </Button>
-                  </div>
-                  {fileImportStatus && (
-                    <p className="text-xs text-primary font-medium mt-2">{fileImportStatus}</p>
-                  )}
-                </div>
-              )}
-
-              {importTab === 'website' && (
-                <div className="space-y-3">
-                  <label className="text-xs font-medium text-dark">Clinic Website URL</label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="https://drsharmadental.com"
-                      value={websiteUrl}
-                      onChange={(e) => setWebsiteUrl(e.target.value)}
-                    />
-                    <Button size="sm" variant="secondary" onClick={() => setFileImportStatus('Crawling website... extracted hours and 4 services.')}>
-                      Crawl
-                    </Button>
-                  </div>
-                  {fileImportStatus && <p className="text-xs text-primary font-medium">{fileImportStatus}</p>}
-                </div>
-              )}
-
-              {importTab === 'gbp' && (
-                <div className="p-4 bg-bg-inset rounded-[8px] space-y-2 text-xs">
-                  <div className="flex items-center gap-2 text-warning font-medium">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Awaiting Google API verification approval</span>
-                  </div>
-                  <p className="text-muted">
-                    Google Business Profile sync is built behind a feature flag. Until verified by Google, you can import via PDF, website, or enter timings manually above.
-                  </p>
-                </div>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setServices([...services, { name: '', price: 500, duration: 15 }])}
+                className="w-full text-xs"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add Another Service
+              </Button>
             </Card>
           </div>
         )}
 
+        {/* Step 5: Final Review & Confirmation */}
         {step === 5 && (
           <div className="space-y-6">
             <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-bold text-dark">Everything is ready!</h2>
-              <p className="text-sm text-muted">Review what Baari understood before going live.</p>
+              <h2 className="text-2xl font-bold text-dark">Confirmation Card — Check Details</h2>
+              <p className="text-sm text-muted">Review everything before launching your live queue.</p>
             </div>
 
-            {/* Editable Confirmation Card per §6.2 */}
-            <Card className="bg-bg-inset border-primary/30 p-5 space-y-4">
-              <div className="flex justify-between items-center border-b border-border pb-3">
-                <span className="text-sm font-semibold text-dark flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  Yeh maine samjha —
+            <Card className="space-y-4 p-6 bg-white shadow-minimal border-primary/20">
+              <div className="border-b border-border pb-3">
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Business</span>
+                <div className="text-lg font-bold text-dark">{businessName}</div>
+                <div className="text-xs text-muted">{area} · WhatsApp: {phone}</div>
+              </div>
+
+              <div className="border-b border-border pb-3">
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                  Providers ({providers.length})
                 </span>
-                <Badge variant="success">Ready for live</Badge>
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2 text-dark font-medium">
-                  <span>🦷</span>
-                  <span>{businessName}, {area}</span>
-                </div>
-                <div className="flex items-center gap-2 text-dark">
-                  <span>👨‍⚕️</span>
-                  <span>
-                    {providers.map(p => `${p.name} (${p.specialty}, ${p.avgMinutes} min)`).join(' · ')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-muted">
-                  <span>🕘</span>
-                  <span>{hours}</span>
-                </div>
-                <div className="flex items-center gap-2 text-dark">
-                  <span>💰</span>
-                  <span>
-                    {services.map(s => `${s.name} ₹${s.price}`).join(' · ')}
-                  </span>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {providers.map((p, i) => (
+                    <Badge key={i} variant="primary">
+                      {p.name} ({p.specialty || 'General'})
+                    </Badge>
+                  ))}
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2 border-t border-border">
+              <div className="border-b border-border pb-3">
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                  Services & Grounded Pricing
+                </span>
+                <div className="divide-y divide-border mt-1">
+                  {services.map((s, i) => (
+                    <div key={i} className="py-1.5 flex justify-between text-xs">
+                      <span className="text-dark font-medium">{s.name}</span>
+                      <span className="font-bold text-dark tabular-nums font-mono">₹{s.price}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2">
                 <Button
                   variant="primary"
-                  className="flex-1"
+                  className="w-full py-3 text-sm font-bold shadow-md"
                   onClick={handleFinishOnboarding}
+                  disabled={submitting}
                 >
-                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                  Sahi hai — Go Live
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setStep(1)}
-                >
-                  ✏️ Badalna hai
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  {submitting ? 'Creating Clinic & Activating...' : 'Sahi Hai — Launch Live Dashboard'}
                 </Button>
               </div>
             </Card>
@@ -400,6 +382,7 @@ export default function OnboardingPage() {
             variant="ghost"
             size="sm"
             onClick={() => setStep(step - 1)}
+            disabled={submitting}
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
@@ -422,4 +405,3 @@ export default function OnboardingPage() {
     </div>
   );
 }
-
