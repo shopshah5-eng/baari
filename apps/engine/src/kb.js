@@ -76,4 +76,13 @@ function ingestUrl(orgId, url) {
   return chunks.map(([t, x]) => add(orgId, { source: 'website:' + host, title: t, text: x }));
 }
 
-module.exports = { add, docs, retrieve, grounded, seed, ingestUrl };
+function ask(orgId, query) {
+  const hits = retrieve(orgId, query);
+  if (!hits.length || hits[0].score < 0.35) {
+    return { escalate: true, answer: null };
+  }
+  const best = hits[0].doc;
+  return { escalate: false, answer: best.text, title: best.title, score: hits[0].score };
+}
+
+module.exports = { add, docs, retrieve, grounded, seed, ingestUrl, ask };

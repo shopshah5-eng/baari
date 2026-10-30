@@ -12,7 +12,7 @@ const files = () => fs.readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).s
 function registerPgMem(db) {
   const { DataType } = require('pg-mem');
   db.public.registerFunction({ name: 'gen_random_uuid', returns: DataType.uuid, impure: true, implementation: () => require('crypto').randomUUID() });
-  db.public.registerFunction({ name: 'ist_today', returns: DataType.date, implementation: () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })) });
+  db.public.registerFunction({ name: 'ist_today', returns: DataType.date, implementation: () => new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) });
   db.public.registerFunction({ name: 'hashtext', args: [DataType.text], returns: DataType.integer, implementation: s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; } });
 }
 

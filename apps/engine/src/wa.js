@@ -54,4 +54,21 @@ function inbound(org, phone, text, type = 'text') {
   return msg;
 }
 
-module.exports = { send, inbox, inbound, quietHours };
+function canSendTo(orgOrOpts, phone, opts) {
+  if (orgOrOpts && orgOrOpts.opt_out) return false;
+  let org = orgOrOpts;
+  let p = phone;
+  let o = opts || {};
+  if (!p && orgOrOpts && orgOrOpts.phone) {
+    p = orgOrOpts.phone;
+    o = orgOrOpts;
+    org = S.load().orgs?.[0];
+  }
+  if (o.opt_out) return false;
+  if (!org) return false;
+  const lead = S.lead ? S.lead(org.id, p) : null;
+  if (lead && lead.do_not_contact && o.kind !== 'transactional') return false;
+  return true;
+}
+
+module.exports = { send, inbox, inbound, quietHours, canSendTo };

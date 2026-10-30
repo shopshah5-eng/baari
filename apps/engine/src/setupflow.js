@@ -61,4 +61,17 @@ function answer(o, k, value) {
   return o;
 }
 
-module.exports = { SETUP, questions: () => SETUP.map(({ k, q, type, opts }) => ({ k, q, type, opts })), answer, seedPresets, PRESETS };
+function preview(orgIdOrSlug) {
+  const o = S.orgById(orgIdOrSlug) || S.org(orgIdOrSlug);
+  if (!o) return null;
+  return {
+    name: o.name,
+    area: o.area,
+    phone: o.phone,
+    doctors: S.providers(o.id),
+    services: S.services(o.id),
+    hours: o.hours
+  };
+}
+
+module.exports = { SETUP, questions: () => SETUP.map(({ k, q, type, opts }) => ({ k, q, type, opts })), answer, preview, seedPresets, PRESETS };

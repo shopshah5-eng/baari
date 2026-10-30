@@ -56,4 +56,22 @@ function recordRating(org, phone, rating, tokenId) {
   return fb;
 }
 
-module.exports = { askReview, recordRating, eligible };
+function recordFeedback(orgIdOrOrg, phone, rating, comment, tokenId) {
+  const org = typeof orgIdOrOrg === 'string' ? (S.orgById(orgIdOrOrg) || S.org(orgIdOrOrg)) : orgIdOrOrg;
+  let p = S.patient(org.id, phone);
+  if (!p) {
+    p = { id: S.id('pt'), org_id: org.id, phone, name: 'Patient ' + phone.slice(-4), consent: { wa: true } };
+    S.load().patients.push(p);
+  }
+  const fb = recordRating(org, phone, rating, tokenId);
+  const link = (org.settings && org.settings.google_review_url) || 'https://g.page/r/BAARI-DEMO/review';
+  return {
+    ...(fb || {}),
+    rating,
+    comment,
+    googleReviewUrl: link,
+    ownerAlert: rating <= 3
+  };
+}
+
+module.exports = { askReview, recordRating, recordFeedback, eligible };
