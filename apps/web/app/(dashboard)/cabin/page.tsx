@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, Button, Badge, ErrorState } from '@baari/ui';
+import { Card, Button, Badge } from '@baari/ui';
 import { CheckCircle2, Clock, Users, Sparkles, ChevronRight, UserX, PauseCircle, FastForward } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface CabinData {
   provider: {

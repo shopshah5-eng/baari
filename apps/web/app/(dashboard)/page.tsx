@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, Badge, Button, ErrorState } from '@baari/ui';
+import { Card, Badge, Button } from '@baari/ui';
 import { Users, Clock, IndianRupee, ArrowRight, UserCheck, AlertTriangle } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface DashboardData {
   kpis: { id: string; title: string; value: string; subtext: string; tone: string }[];

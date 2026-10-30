@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Badge, ErrorState } from '@baari/ui';
+import { Card, Button, Badge } from '@baari/ui';
 import { ShieldCheck, AlertCircle, Building2, MessageSquare, DollarSign, Lock } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface TenantItem {
   id: string;

@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Badge, ErrorState } from '@baari/ui';
+import { Card, Button, Badge } from '@baari/ui';
 import {
   MessageSquare, ShieldCheck, AlertCircle, RefreshCw,
   ExternalLink, Key, CheckCircle2, Clock, DollarSign
 } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface WhatsAppStatus {
   lane: string;

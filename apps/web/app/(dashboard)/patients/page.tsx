@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Badge, Input, ErrorState } from '@baari/ui';
+import { Card, Button, Badge, Input } from '@baari/ui';
 import { Users, Download, Trash2, Search, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface PatientItem {
   id: string;
@@ -19,6 +20,7 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [confirmDeletePatient, setConfirmDeletePatient] = useState<{ id: string; name: string } | null>(null);
 
   const fetchPatients = () => {
     setLoading(true);
@@ -65,15 +67,17 @@ export default function PatientsPage() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`DPDP Hard Delete: Permanently wipe all records for ${name}? This action is irreversible.`)) {
-      try {
-        await fetch(`/engine-api/dpdp/delete?patientId=${id}`, { method: 'DELETE' });
-        setPatients(patients.filter((p) => p.id !== id));
-        setActionNotice(`Patient ${name} records permanently wiped.`);
-      } catch {
-        setActionNotice('Delete operation failed.');
-      }
+  const executeDelete = async () => {
+    if (!confirmDeletePatient) return;
+    const { id, name } = confirmDeletePatient;
+    try {
+      await fetch(`/engine-api/dpdp/delete?patientId=${id}`, { method: 'DELETE' });
+      setPatients(patients.filter((p) => p.id !== id));
+      setActionNotice(`Patient ${name} records permanently wiped.`);
+    } catch {
+      setActionNotice('Delete operation failed.');
+    } finally {
+      setConfirmDeletePatient(null);
     }
   };
 
@@ -177,7 +181,7 @@ export default function PatientsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(p.id, p.name)}
+                      onClick={() => setConfirmDeletePatient({ id: p.id, name: p.name })}
                       className="text-xs text-danger hover:bg-danger-light"
                     >
                       <Trash2 className="w-3.5 h-3.5 mr-1" />
@@ -190,6 +194,41 @@ export default function PatientsPage() {
           </table>
         )}
       </Card>
+
+      {/* In-Page DPDP Deletion Dialog (§17) */}
+      {confirmDeletePatient && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full space-y-4 bg-white p-6 shadow-xl">
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-dark">DPDP Hard Delete Confirmation</h3>
+              <p className="text-xs text-muted">
+                Permanently wipe all health, visit, and WhatsApp records for <span className="font-semibold text-dark">{confirmDeletePatient.name}</span>?
+              </p>
+            </div>
+            <p className="text-[11px] text-danger bg-danger-light p-2.5 rounded-[6px] border border-danger/20">
+              ⚠️ Warning: Under Section 12 of the DPDP Act, this erasure is complete and irreversible.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDeletePatient(null)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={executeDelete}
+                className="text-xs"
+              >
+                Confirm Hard Delete
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, Button, Badge, Input, ErrorState } from '@baari/ui';
+import { Card, Button, Badge, Input } from '@baari/ui';
 import {
   PhoneCall, UserPlus, Clock, AlertOctagon, RotateCcw,
   CheckCircle2, Users, ArrowRight, ShieldAlert, Sparkles, AlertCircle
 } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface WaitingToken {
   id: string;
@@ -208,7 +209,7 @@ export default function DeskPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold tracking-tight text-dark">Reception Desk</h1>
-            <Badge variant="neutral">Live Polling (3s)</Badge>
+            <Badge variant="neutral">Auto-refresh 3s</Badge>
           </div>
           <p className="text-xs text-muted">
             Per-provider isolated queues. Receptionist operates with single-tap Call Next.

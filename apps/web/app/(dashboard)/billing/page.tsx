@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Badge, ErrorState } from '@baari/ui';
+import { Card, Button, Badge } from '@baari/ui';
 import { Check, QrCode, FileText, ArrowRight, ShieldCheck, Download, AlertCircle } from 'lucide-react';
 import { PLANS, formatInr, PlanConfig } from '@baari/shared';
+import { ErrorState } from '../components/ErrorState';
 
 export default function BillingPage() {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual');
@@ -24,7 +25,7 @@ export default function BillingPage() {
       .then(d => {
         if (d) setBillingData(d);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const planList = [PLANS.starter, PLANS.growth, PLANS.pro, PLANS.hospital];
@@ -75,17 +76,15 @@ export default function BillingPage() {
         <div className="bg-white p-1 rounded-full border border-border inline-flex items-center">
           <button
             onClick={() => setPeriod('monthly')}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              period === 'monthly' ? 'bg-primary text-white font-semibold' : 'text-muted hover:text-dark'
-            }`}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${period === 'monthly' ? 'bg-primary text-white font-semibold' : 'text-muted hover:text-dark'
+              }`}
           >
             Monthly
           </button>
           <button
             onClick={() => setPeriod('annual')}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5 ${
-              period === 'annual' ? 'bg-primary text-white font-semibold' : 'text-muted hover:text-dark'
-            }`}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5 ${period === 'annual' ? 'bg-primary text-white font-semibold' : 'text-muted hover:text-dark'
+              }`}
           >
             <span>Annual</span>
             <span className="px-1.5 py-0.5 rounded-full bg-success-light text-success text-[10px] font-bold">
@@ -105,9 +104,8 @@ export default function BillingPage() {
           return (
             <Card
               key={plan.id}
-              className={`flex flex-col justify-between space-y-4 relative ${
-                plan.popular ? 'border-primary shadow-minimal ring-1 ring-primary' : 'border-border'
-              }`}
+              className={`flex flex-col justify-between space-y-4 relative ${plan.popular ? 'border-primary shadow-minimal ring-1 ring-primary' : 'border-border'
+                }`}
             >
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">

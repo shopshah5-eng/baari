@@ -73,60 +73,270 @@ async function fetchRoute(route, opts = {}) {
     crit('B1. Failed to reach /engine-api/health', e.message);
   }
 
-  // ── B2. Authentication & Route Protection ──────────────────────────────────
-  console.log('\n--- B2. Authentication & Route Protection ---');
+  // ── B2. Login Authentication & Strict Password Verification (P0 §1) ────────
+  console.log('\n--- B2. Login Authentication & Strict Password Verification ---');
+  let authCookie = null;
   try {
-    const desk = await fetchRoute('/desk');
-    if (desk.status === 307 || desk.status === 302 || desk.status === 401) {
-      pass('B2. /desk is protected (redirected unauthenticated visitor)', `Status: ${desk.status}`);
-    } else {
-      crit('B2. /desk is public to unauthenticated visitors', `Status: ${desk.status}`);
-    }
-  } catch (e) {
-    warn('B2. Could not probe /desk', e.message);
-  }
-
-  try {
-    const patients = await fetchRoute('/patients');
-    if (patients.status === 307 || patients.status === 302 || patients.status === 401) {
-      pass('B2. /patients is protected (no public PII)', `Status: ${patients.status}`);
-    } else {
-      crit('B2. /patients is public to unauthenticated visitors (PII hazard)', `Status: ${patients.status}`);
-    }
-  } catch (e) {
-    warn('B2. Could not probe /patients', e.message);
-  }
-
-  try {
+    // Test 1: Invalid credentials must be rejected with 401
     const badLogin = await fetchRoute('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'fake@example.com', password: '123' })
+      body: JSON.stringify({ email: 'audit_x@example.invalid', password: 'wrongpassword123' })
     });
-    if (badLogin.status === 400 || badLogin.status === 401) {
-      pass('B2. Invalid login rejected with 400/401');
+
+    if (badLogin.status === 401) {
+      pass('B2. Invalid email/password rejected with 401');
     } else {
-      crit('B2. Fake auth allowed invalid password login', `Status: ${badLogin.status}`);
+      crit('B2. Login allowed invalid credentials', `Status: ${badLogin.status}`);
+    }
+
+    // Verify tenantId is not leaked in response
+    if (badLogin.text.includes('tenantId')) {
+      crit('B2. Login response leaked tenantId in body');
+    } else {
+      pass('B2. No tenantId leaked in login response');
+    }
+
+    // Test 2: Valid credentials must succeed with 200 and return session cookie
+    const validLogin = await fetchRoute('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'doctor@sharma.in', password: 'SharmaDental@2026' })
+    });
+
+    if (validLogin.status === 200) {
+      pass('B2. Valid clinic owner login succeeded with 200 OK');
+      const setCookie = validLogin.headers.get('set-cookie');
+      if (setCookie && setCookie.includes('baari_session=')) {
+        authCookie = setCookie.split(';')[0];
+        pass('B2. HttpOnly session cookie issued');
+      } else {
+        warn('B2. Session cookie header not captured or formatted differently');
+      }
+    } else {
+      crit('B2. Valid clinic owner login failed', `Status: ${validLogin.status}`);
     }
   } catch (e) {
-    warn('B2. Could not test login endpoint', e.message);
+    crit('B2. Login probe failed', e.message);
   }
 
-  // ── B3. Admin Role Isolation ───────────────────────────────────────────────
-  console.log('\n--- B3. Admin Console Isolation ---');
+  // ── B3. Forged Session Rejection & Route Protection (P0 §2) ─────────────────
+  console.log('\n--- B3. Cryptographic Session Verification & Forged Cookie Rejection ---');
   try {
-    const admin = await fetchRoute('/admin');
-    if (admin.status === 307 || admin.status === 302 || admin.status === 401 || admin.status === 403) {
-      pass('B3. /admin is protected from anonymous visitors', `Status: ${admin.status}`);
+    const forgedDesk = await fetchRoute('/desk', {
+      headers: { Cookie: 'baari_session=forged_token_value_abc' }
+    });
+    if (forgedDesk.status === 307 || forgedDesk.status === 302 || forgedDesk.status === 401) {
+      pass('B3. Forged cookie rejected on /desk (redirected to login)', `Status: ${forgedDesk.status}`);
     } else {
-      crit('B3. /admin is publicly accessible without platform credentials', `Status: ${admin.status}`);
+      crit('B3. Forged session allowed access to /desk', `Status: ${forgedDesk.status}`);
     }
   } catch (e) {
-    warn('B3. Could not probe /admin', e.message);
+    warn('B3. Could not probe forged /desk', e.message);
   }
 
-  // ── B4 & B5. Code Scans (No catch-fallback lies, no Math.random WABA) ───────
-  console.log('\n--- B4 & B5. Source Code Integrity Scans ---');
+  try {
+    const forgedPatients = await fetchRoute('/patients', {
+      headers: { Cookie: 'baari_session=forged_token_value_abc' }
+    });
+    if (forgedPatients.status === 307 || forgedPatients.status === 302 || forgedPatients.status === 401) {
+      pass('B3. Forged cookie rejected on /patients (PII protected)', `Status: ${forgedPatients.status}`);
+    } else {
+      crit('B3. Forged session allowed access to /patients', `Status: ${forgedPatients.status}`);
+    }
+  } catch (e) {
+    warn('B3. Could not probe forged /patients', e.message);
+  }
+
+  // ── B4. Unauthenticated /engine-api/* Access Guard (P0 §3) ─────────────────
+  console.log('\n--- B4. Unauthenticated Engine API Guard ---');
+  const protectedEngineEndpoints = [
+    ['GET', '/engine-api/desk'],
+    ['POST', '/engine-api/desk/call-next'],
+    ['GET', '/engine-api/patients'],
+    ['GET', '/engine-api/dpdp/export']
+  ];
+
+  for (const [method, ep] of protectedEngineEndpoints) {
+    try {
+      const res = await fetchRoute(ep, { method });
+      if (res.status === 401) {
+        pass(`B4. Unauthenticated ${method} ${ep} rejected with 401`);
+      } else {
+        crit(`B4. Unauthenticated ${method} ${ep} permitted without token`, `Status: ${res.status}`);
+      }
+    } catch (e) {
+      warn(`B4. Could not probe ${ep}`, e.message);
+    }
+  }
+
+  // ── B5. Operator Console Isolation (P1 §6) ─────────────────────────────────
+  console.log('\n--- B5. Operator Console Isolation ---');
+  try {
+    // Anonymous request must return 404 Not Found (or redirect)
+    const anonAdmin = await fetchRoute('/admin');
+    if (anonAdmin.status === 404 || anonAdmin.status === 307 || anonAdmin.status === 302) {
+      pass('B5. /admin is isolated from anonymous visitors', `Status: ${anonAdmin.status}`);
+    } else {
+      crit('B5. /admin returned unexpected status to anonymous visitor', `Status: ${anonAdmin.status}`);
+    }
+
+    // Clinic owner request must return 404 Not Found (NOT 403, operator console must be invisible)
+    if (authCookie) {
+      const clinicAdmin = await fetchRoute('/admin', {
+        headers: { Cookie: authCookie }
+      });
+      if (clinicAdmin.status === 404) {
+        pass('B5. /admin returns 404 Not Found to clinic owner (operator console invisible)');
+      } else {
+        crit('B5. /admin did not return 404 to clinic owner', `Status: ${clinicAdmin.status}`);
+      }
+    }
+  } catch (e) {
+    warn('B5. Could not probe /admin isolation', e.message);
+  }
+
+  // ── B6. Queue State Persistence & Idempotency (P0 §4 & §5) ───────────────────
+  console.log('\n--- B6. Queue State Persistence & Idempotency ---');
+  if (authCookie) {
+    try {
+      const idemKey = `audit-key-${Date.now()}`;
+      const callRes1 = await fetchRoute('/engine-api/desk/call-next', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: authCookie
+        },
+        body: JSON.stringify({ providerId: 'p1', idempotencyKey: idemKey })
+      });
+
+      if (callRes1.status === 200) {
+        const body1 = JSON.parse(callRes1.text);
+        if (body1.called) {
+          pass('B6. call-next succeeded and returned called token', body1.called.formatted_number);
+
+          // Verify state persistence on GET /engine-api/desk
+          const deskRes = await fetchRoute('/engine-api/desk', {
+            headers: { Cookie: authCookie }
+          });
+          const deskBody = JSON.parse(deskRes.text);
+          const col1 = deskBody.columns && deskBody.columns[0];
+          if (col1 && col1.current && col1.current.id === body1.called.id) {
+            pass('B6. Queue state persisted: GET /engine-api/desk reflects called patient');
+          } else {
+            crit('B6. Queue state NOT persisted across requests');
+          }
+
+          // Verify idempotency replay
+          const callRes2 = await fetchRoute('/engine-api/desk/call-next', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Cookie: authCookie
+            },
+            body: JSON.stringify({ providerId: 'p1', idempotencyKey: idemKey })
+          });
+          const body2 = JSON.parse(callRes2.text);
+          if (body2.called && body2.called.id === body1.called.id) {
+            pass('B6. Idempotency verified: replaying identical key returned cached response');
+          } else {
+            crit('B6. Idempotency failed: second call advanced queue instead of replaying');
+          }
+        } else {
+          warn('B6. call-next returned empty called object (queue may be empty)');
+        }
+      } else {
+        crit('B6. Authenticated call-next failed', `Status: ${callRes1.status}`);
+      }
+    } catch (e) {
+      crit('B6. Queue persistence / idempotency test failed', e.message);
+    }
+  } else {
+    warn('B6. Skipped persistence test due to missing auth cookie');
+  }
+
+  // ── B7. Login Rate Limiting (P1 §7) ─────────────────────────────────────────
+  console.log('\n--- B7. Login Rate Limiting (Sliding Window) ---');
+  try {
+    let rateLimited = false;
+    // Send 6 rapid bad login attempts
+    for (let i = 0; i < 7; i++) {
+      const res = await fetchRoute('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `spam_${i}@example.com`, password: 'wrong' })
+      });
+      if (res.status === 429) {
+        rateLimited = true;
+        break;
+      }
+    }
+    if (rateLimited) {
+      pass('B7. Login rate limiting active: >5 requests triggered 429 Too Many Requests');
+    } else {
+      warn('B7. Rate limit 429 not triggered within 7 calls (sliding window might be per IP)');
+    }
+  } catch (e) {
+    warn('B7. Could not test rate limiting', e.message);
+  }
+
+  // ── B8. Security Headers & CSP (P1 §8) ───────────────────────────────────────
+  console.log('\n--- B8. Security Headers & Production CSP ---');
+  try {
+    const root = await fetchRoute('/login');
+    const h = root.headers;
+    const csp = h.get('content-security-policy') || '';
+
+    if (csp) {
+      if (!csp.includes("'unsafe-eval'")) {
+        pass("B8. Content-Security-Policy drops 'unsafe-eval' in production");
+      } else {
+        crit("B8. Production CSP still contains 'unsafe-eval'");
+      }
+    } else {
+      crit('B8. Missing Content-Security-Policy header');
+    }
+
+    const required = [
+      ['x-frame-options', 'X-Frame-Options'],
+      ['x-content-type-options', 'X-Content-Type-Options'],
+      ['referrer-policy', 'Referrer-Policy'],
+      ['permissions-policy', 'Permissions-Policy']
+    ];
+
+    for (const [key, label] of required) {
+      if (h.get(key)) {
+        pass(`B8. ${label} is present`, h.get(key).slice(0, 40));
+      } else {
+        crit(`B8. Missing security header: ${label}`);
+      }
+    }
+  } catch (e) {
+    warn('B8. Could not inspect headers', e.message);
+  }
+
+  // ── B9. Branding & OpenGraph Card Assets ────────────────────────────────────
+  console.log('\n--- B9. Branding & OpenGraph Card Assets ---');
+  try {
+    const icon = await fetchRoute('/icon.svg');
+    if (icon.status === 200) {
+      pass('B9. /icon.svg returns 200 OK (brand favicon present)');
+    } else {
+      warn('B9. /icon.svg returned non-200 status', `Status: ${icon.status}`);
+    }
+
+    const og = await fetchRoute('/opengraph-image');
+    if (og.status === 200) {
+      pass('B9. /opengraph-image returns 200 OK (WhatsApp link preview card)');
+    } else {
+      warn('B9. /opengraph-image returned non-200 status', `Status: ${og.status}`);
+    }
+  } catch (e) {
+    warn('B9. Could not probe branding assets', e.message);
+  }
+
+  // ── B10. Source Code Integrity Scans ────────────────────────────────────────
+  console.log('\n--- B10. Source Code Integrity Scans ---');
   const webAppDir = path.join(__dirname, '..', 'apps', 'web', 'app');
   function scanDir(dir) {
     let files = [];
@@ -145,47 +355,21 @@ async function fetchRoute(route, opts = {}) {
 
   for (const file of sourceFiles) {
     const content = fs.readFileSync(file, 'utf8');
-    // Check for catch blocks that inject fake KPI or provider objects
     if (/catch\s*\(\s*\)\s*=>\s*\{[^}]*kpis\s*:\s*\[/.test(content)) {
       catchLiesFound++;
-      crit('B4. Catch fallback literal object detected in', path.relative(process.cwd(), file));
+      crit('B10. Catch fallback literal object detected in', path.relative(process.cwd(), file));
     }
-    // Check for Math.random() assigned to wabaId or similar identifiers
     if (/wabaId\s*:\s*.*Math\.random\(\)/.test(content)) {
       randomWabaFound++;
-      crit('B5. Math.random() WABA ID fabrication detected in', path.relative(process.cwd(), file));
+      crit('B10. Math.random() WABA ID fabrication detected in', path.relative(process.cwd(), file));
     }
   }
 
   if (catchLiesFound === 0) {
-    pass('B4. Zero catch-block data fabrications across app source');
+    pass('B10. Zero catch-block data fabrications across app source');
   }
   if (randomWabaFound === 0) {
-    pass('B5. Zero Math.random() identifier fabrications');
-  }
-
-  // ── B6. Security Headers Check ─────────────────────────────────────────────
-  console.log('\n--- B6. Security Headers ---');
-  try {
-    const root = await fetchRoute('/login');
-    const h = root.headers;
-    const required = [
-      ['content-security-policy', 'Content-Security-Policy'],
-      ['x-frame-options', 'X-Frame-Options'],
-      ['x-content-type-options', 'X-Content-Type-Options'],
-      ['referrer-policy', 'Referrer-Policy'],
-      ['permissions-policy', 'Permissions-Policy']
-    ];
-
-    for (const [key, label] of required) {
-      if (h.get(key)) {
-        pass(`B6. ${label} is present`, h.get(key).slice(0, 40));
-      } else {
-        crit(`B6. Missing security header: ${label}`);
-      }
-    }
-  } catch (e) {
-    warn('B6. Could not inspect headers', e.message);
+    pass('B10. Zero Math.random() identifier fabrications');
   }
 
   // ── Final Audit Verdict ───────────────────────────────────────────────────
@@ -204,4 +388,3 @@ async function fetchRoute(route, opts = {}) {
   console.error('Audit runner error:', e);
   process.exit(1);
 });
-

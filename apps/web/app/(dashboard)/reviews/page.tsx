@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Badge, Button, ErrorState } from '@baari/ui';
+import { Card, Badge, Button } from '@baari/ui';
 import { Star, AlertTriangle, CheckCircle2, ShieldCheck, ExternalLink, RotateCcw } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 
 interface ReviewItem {
   id: string;
@@ -146,9 +147,8 @@ export default function ReviewsPage() {
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
-                          className={`w-3.5 h-3.5 ${
-                            s <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
-                          }`}
+                          className={`w-3.5 h-3.5 ${s <= r.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
+                            }`}
                         />
                       ))}
                     </div>
