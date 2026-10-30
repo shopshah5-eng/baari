@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, Badge, Button, ErrorState } from '@baari/ui';
-import { Clock, MapPin, Car, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, Car } from 'lucide-react';
 
 interface TokenStatusData {
   tokenFormatted: string;
@@ -51,15 +51,15 @@ export default function TokenStatusPage({ params }: { params: Promise<{ token: s
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-bg-inset flex items-center justify-center p-4">
+      <main className="min-h-screen bg-bg-inset flex items-center justify-center p-4" role="main">
         <Card className="max-w-sm w-full h-80 animate-pulse bg-white border-border" />
-      </div>
+      </main>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-bg-inset flex items-center justify-center p-4">
+      <main className="min-h-screen bg-bg-inset flex items-center justify-center p-4" role="main">
         <div className="max-w-sm w-full space-y-4">
           <ErrorState
             title="Token Status Not Found"
@@ -69,22 +69,22 @@ export default function TokenStatusPage({ params }: { params: Promise<{ token: s
           />
           <div className="text-center">
             <Link href="/status">
-              <Button variant="ghost" size="sm" className="text-xs">
+              <Button variant="ghost" size="sm" className="text-xs" aria-label="Check another token">
                 Doosra token check karein
               </Button>
             </Link>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-bg-inset flex items-center justify-center p-4">
+    <main className="min-h-screen bg-bg-inset flex items-center justify-center p-4" role="main">
       <div className="w-full max-w-sm space-y-4">
         {/* Clinic Header */}
         <div className="text-center space-y-1">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-primary text-white font-bold text-lg">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-primary text-white font-bold text-lg" aria-hidden="true">
             ब
           </div>
           <h1 className="text-lg font-bold text-dark">{data.clinicName}</h1>
@@ -125,7 +125,7 @@ export default function TokenStatusPage({ params }: { params: Promise<{ token: s
             </div>
           </div>
 
-          <div className="space-y-2 text-center">
+          <div className="space-y-2 text-center" aria-live="polite">
             <Badge variant={data.state === 'CALLED' ? 'success' : 'neutral'} className="text-xs py-1 px-3">
               {data.state === 'CALLED' ? '🚨 AAPKI BAARI AA GAYI HAI — CABIN MEIN JAYEIN' : 'Queue mein booking confirmed'}
             </Badge>
@@ -135,7 +135,6 @@ export default function TokenStatusPage({ params }: { params: Promise<{ token: s
           </div>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }
-

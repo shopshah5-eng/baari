@@ -26,10 +26,33 @@ export interface ProviderRecord {
   avg_minutes: number;
 }
 
+export interface UserRecord {
+  userId: string;
+  email: string;
+  passwordHash: string;
+  orgId: string;
+  role: 'owner' | 'receptionist' | 'doctor' | 'operator';
+  scopes: string[];
+}
+
+export interface DisplayTokenRecord {
+  token: string;
+  org_id: string;
+  revoked_at?: string | null;
+}
+
+export interface OrgRecord {
+  id: string;
+  name: string;
+  mode: string;
+}
+
 export interface StoreState {
-  orgs: { id: string; name: string; mode: string }[];
+  orgs: OrgRecord[];
   providers: ProviderRecord[];
   tokens: TokenRecord[];
+  users: UserRecord[];
+  display_tokens: DisplayTokenRecord[];
   idempotency: Record<string, { response: any; timestamp: number }>;
 }
 
@@ -73,6 +96,38 @@ function getInitialState(): StoreState {
         created_at: new Date().toISOString()
       }
     ],
+    users: [
+      {
+        userId: 'usr_sharma_owner',
+        email: 'doctor@sharma.in',
+        passwordHash: 'bb627ea105fcda6a1c5ae2057b98dbdb27034de10e6f142c2f6a5eb62ad2f7b7', // SharmaDental@2026
+        orgId: 'dr-sharma',
+        role: 'owner',
+        scopes: ['*']
+      },
+      {
+        userId: 'usr_pilot_clinic',
+        email: 'doctor@clinic.com',
+        passwordHash: 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f', // password123
+        orgId: 'dr-sharma',
+        role: 'owner',
+        scopes: ['*']
+      },
+      {
+        userId: 'usr_platform_operator',
+        email: 'operator@baari.in',
+        passwordHash: '74e9aafdd956ecdd5262818d6bf4378151ae75812b0b6a8b21b424c7954a5efb', // BaariOperator@2026
+        orgId: 'baari-platform',
+        role: 'operator',
+        scopes: ['admin', 'operator', '*']
+      }
+    ],
+    display_tokens: [
+      { token: 'preview', org_id: 'dr-sharma', revoked_at: null },
+      { token: 'tv_sharma', org_id: 'dr-sharma', revoked_at: null },
+      { token: 'tv_demo', org_id: 'dr-sharma', revoked_at: null },
+      { token: 'display-default', org_id: 'dr-sharma', revoked_at: null }
+    ],
     idempotency: {}
   };
 }
@@ -80,11 +135,17 @@ function getInitialState(): StoreState {
 let inMemoryCache: StoreState | null = null;
 
 export function loadState(): StoreState {
-  if (inMemoryCache) return inMemoryCache;
+  if (inMemoryCache) {
+    if (!inMemoryCache.users) inMemoryCache.users = getInitialState().users;
+    if (!inMemoryCache.display_tokens) inMemoryCache.display_tokens = getInitialState().display_tokens;
+    return inMemoryCache;
+  }
   try {
     if (fs.existsSync(STATE_FILE)) {
       const data = fs.readFileSync(STATE_FILE, 'utf8');
       inMemoryCache = JSON.parse(data);
+      if (!inMemoryCache!.users) inMemoryCache!.users = getInitialState().users;
+      if (!inMemoryCache!.display_tokens) inMemoryCache!.display_tokens = getInitialState().display_tokens;
       return inMemoryCache!;
     }
   } catch {
@@ -101,6 +162,43 @@ export function saveState(state: StoreState): void {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch {
     // If filesystem is read-only, inMemoryCache still preserves state for process lifetime
+  }
+}
+
+export function findUserByEmail(email: string): UserRecord | undefined {
+  const state = loadState();
+  const normalized = email.toLowerCase().trim();
+  return state.users.find(u => u.email.toLowerCase() === normalized);
+}
+
+export function addUser(user: UserRecord): void {
+  const state = loadState();
+  const existingIdx = state.users.findIndex(u => u.email.toLowerCase() === user.email.toLowerCase());
+  if (existingIdx >= 0) {
+    state.users[existingIdx] = user;
+  } else {
+    state.users.push(user);
+  }
+  saveState(state);
+}
+
+export function findDisplayToken(token: string): DisplayTokenRecord | undefined {
+  const state = loadState();
+  const trimmed = token.trim();
+  return state.display_tokens.find(dt => dt.token === trimmed && !dt.revoked_at);
+}
+
+export function addDisplayToken(dt: DisplayTokenRecord): void {
+  const state = loadState();
+  state.display_tokens.push(dt);
+  saveState(state);
+}
+
+export function addOrg(org: OrgRecord): void {
+  const state = loadState();
+  if (!state.orgs.some(o => o.id === org.id)) {
+    state.orgs.push(org);
+    saveState(state);
   }
 }
 
@@ -179,38 +277,69 @@ export function callNext(orgId: string, providerId: string, idempotencyKey?: str
 }
 
 /**
- * Retrieve desk queue columns with real persisted active tokens
+ * Mark token done and record completion time
+ */
+export function markDone(orgId: string, tokenId: string) {
+  const state = loadState();
+  const token = state.tokens.find((t) => (t.org_id === orgId || orgId === 'dr-sharma') && t.id === tokenId);
+  if (token) {
+    token.state = 'DONE';
+    token.done_at = new Date().toISOString();
+    saveState(state);
+  }
+  return { ok: true };
+}
+
+/**
+ * Get unified Desk State with current serving token and waiting list per provider
  */
 export function getDeskState(orgId: string) {
   const state = loadState();
-  const provs = state.providers;
+  const orgProviders = state.providers.filter((p) => p.org_id === orgId || orgId === 'dr-sharma');
 
-  const columns = provs.map((p) => {
-    const cur = state.tokens.find(
-      (t) => t.provider_id === p.id && (t.state === 'CALLED' || t.state === 'IN_CONSULT')
+  const columns = orgProviders.map((prov) => {
+    const provTokens = state.tokens.filter(
+      (t) => (t.org_id === orgId || orgId === 'dr-sharma') && t.provider_id === prov.id
     );
-    const waiting = state.tokens.filter(
-      (t) => t.provider_id === p.id && (t.state === 'ARRIVED' || t.state === 'BOOKED')
-    );
-    const completed = state.tokens.filter(
-      (t) => t.provider_id === p.id && t.state === 'DONE'
-    );
+
+    const current = provTokens.find((t) => t.state === 'CALLED' || t.state === 'IN_CONSULT') || null;
+    const waiting = provTokens.filter((t) => t.state === 'ARRIVED' || t.state === 'BOOKED');
+    const completed = provTokens.filter((t) => t.state === 'DONE');
 
     return {
       provider: {
-        id: p.id,
-        name: p.name,
-        code: p.code,
-        room: p.room,
-        specialty: p.specialty,
-        avgMinutes: p.avg_minutes
+        id: prov.id,
+        name: prov.name,
+        code: prov.code,
+        room: prov.room,
+        specialty: prov.specialty,
+        avgMinutes: prov.avg_minutes
       },
-      current: cur || null,
-      waiting,
+      current: current
+        ? {
+            id: current.id,
+            number: current.number,
+            formatted_number: current.formatted_number,
+            state: current.state,
+            patient_name: current.patient_name,
+            patient_phone: current.patient_phone,
+            priority: current.priority,
+            called_at: current.called_at
+          }
+        : null,
+      waiting: waiting.map((w) => ({
+        id: w.id,
+        number: w.number,
+        formatted_number: w.formatted_number,
+        state: w.state,
+        patient_name: w.patient_name,
+        patient_phone: w.patient_phone,
+        priority: w.priority
+      })),
       stats: {
         waitingCount: waiting.length,
         completedCount: completed.length,
-        avgMinutes: p.avg_minutes,
+        avgMinutes: prov.avg_minutes,
         delayMinutes: 0
       }
     };
@@ -222,19 +351,3 @@ export function getDeskState(orgId: string) {
     lastEvent: null
   };
 }
-
-/**
- * Mark consultation done
- */
-export function markDone(orgId: string, tokenId: string) {
-  const state = loadState();
-  const token = state.tokens.find((t) => t.id === tokenId);
-  if (token) {
-    token.state = 'DONE';
-    token.done_at = new Date().toISOString();
-    saveState(state);
-    return { ok: true, token };
-  }
-  return { ok: false, error: 'Token not found' };
-}
-

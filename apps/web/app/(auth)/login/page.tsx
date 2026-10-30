@@ -3,8 +3,8 @@
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Input, Card, Badge } from '@baari/ui';
-import { ArrowRight, Lock, KeyRound, AlertCircle } from 'lucide-react';
+import { Button, Input, Card } from '@baari/ui';
+import { ArrowRight, AlertCircle } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
@@ -50,7 +50,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg-inset px-4">
+    <main className="min-h-screen flex items-center justify-center bg-bg-inset px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-[12px] bg-primary text-white font-bold text-xl shadow-minimal">
@@ -61,14 +61,17 @@ function LoginForm() {
         </div>
 
         <Card className="space-y-4 shadow-minimal">
-          <div className="flex border-b border-border pb-3">
+          <div className="flex border-b border-border pb-3" role="tablist" aria-label="Authentication Method">
             <button
               type="button"
+              role="tab"
+              aria-selected={authMode === 'password'}
+              aria-label="Login with Email and Password"
               onClick={() => {
                 setAuthMode('password');
                 setError(null);
               }}
-              className={`flex-1 text-center py-1.5 text-xs font-medium rounded-[8px] transition-colors ${
+              className={`flex-1 text-center py-1.5 text-xs font-medium rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 authMode === 'password' ? 'bg-primary-light text-primary font-semibold' : 'text-muted hover:text-dark'
               }`}
             >
@@ -76,11 +79,14 @@ function LoginForm() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={authMode === 'pin'}
+              aria-label="Login with Receptionist PIN"
               onClick={() => {
                 setAuthMode('pin');
                 setError(null);
               }}
-              className={`flex-1 text-center py-1.5 text-xs font-medium rounded-[8px] transition-colors ${
+              className={`flex-1 text-center py-1.5 text-xs font-medium rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 authMode === 'pin' ? 'bg-primary-light text-primary font-semibold' : 'text-muted hover:text-dark'
               }`}
             >
@@ -89,7 +95,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <div className="p-3 bg-danger-light border border-danger/20 rounded-[8px] flex items-center gap-2 text-xs text-danger">
+            <div className="p-3 bg-danger-light border border-danger/20 rounded-[8px] flex items-center gap-2 text-xs text-danger" role="alert">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -99,8 +105,10 @@ function LoginForm() {
             {authMode === 'password' ? (
               <>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-dark">Business Email</label>
+                  <label htmlFor="loginEmail" className="text-xs font-medium text-dark">Business Email</label>
                   <Input
+                    id="loginEmail"
+                    name="email"
                     type="email"
                     placeholder="doctor@clinic.com"
                     value={email}
@@ -111,9 +119,11 @@ function LoginForm() {
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-medium text-dark">Password</label>
+                    <label htmlFor="loginPassword" className="text-xs font-medium text-dark">Password</label>
                   </div>
                   <Input
+                    id="loginPassword"
+                    name="password"
                     type="password"
                     placeholder="••••••••"
                     value={password}
@@ -125,8 +135,10 @@ function LoginForm() {
               </>
             ) : (
               <div className="space-y-1">
-                <label className="text-xs font-medium text-dark">Desk Fast PIN</label>
+                <label htmlFor="loginPin" className="text-xs font-medium text-dark">Desk Fast PIN</label>
                 <Input
+                  id="loginPin"
+                  name="pin"
                   type="password"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -150,6 +162,7 @@ function LoginForm() {
               size="md"
               className="w-full text-xs font-semibold"
               disabled={loading}
+              aria-label={authMode === 'password' ? 'Sign In to Dashboard' : 'Unlock Reception Desk'}
             >
               {loading ? 'Authenticating...' : authMode === 'password' ? 'Sign In to Dashboard' : 'Unlock Reception Desk'}
               <ArrowRight className="w-4 h-4 ml-1" />
@@ -159,14 +172,14 @@ function LoginForm() {
           <div className="border-t border-border pt-3 text-center">
             <p className="text-xs text-muted">
               Nayi clinic register karni hai?{' '}
-              <Link href="/onboarding" className="text-primary font-semibold hover:underline">
-                Start setup here
+              <Link href="/signup" className="text-primary font-semibold hover:underline">
+                Create new clinic
               </Link>
             </p>
           </div>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -177,4 +190,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifySession } from './lib/auth';
+import { verifySession } from './lib/session';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -19,16 +19,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Public web app pages
-  const isPublicPage =
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/signup') ||
-    pathname.startsWith('/tv') ||
-    pathname.startsWith('/status') ||
-    pathname.startsWith('/onboarding') ||
+  // 2. Public auth and health API endpoints (§C2)
+  const isPublicApi =
+    pathname === '/api/health' ||
     pathname === '/api/auth/login' ||
+    pathname === '/api/auth/signup' ||
     pathname === '/api/auth/logout' ||
-    pathname === '/api/health';
+    pathname === '/api/auth/forgot' ||
+    pathname === '/api/auth/reset' ||
+    pathname.startsWith('/api/webhooks/');
+
+  if (isPublicApi) {
+    return NextResponse.next();
+  }
 
   // 3. Engine API endpoints - check public vs protected (§3)
   const isEngineApi = pathname.startsWith('/engine-api') || pathname.startsWith('/api/engine');
@@ -66,11 +69,43 @@ export async function middleware(request: NextRequest) {
     });
   }
 
+  // 4. Protected internal API endpoints (/api/auth/me, /api/tenant, etc. §C3)
+  // CRITICAL RULE: API paths must NEVER return 307 HTML redirects; return 401 JSON!
+  if (pathname.startsWith('/api/')) {
+    const rawToken =
+      request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+      request.cookies.get('baari_session')?.value;
+
+    const session = await verifySession(rawToken);
+    if (!session) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-baari-org-id', session.orgId);
+    requestHeaders.set('x-baari-user-id', session.userId);
+    requestHeaders.set('x-baari-role', session.role);
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders
+      }
+    });
+  }
+
+  // 5. Public web app pages
+  const isPublicPage =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname.startsWith('/tv/') ||
+    pathname.startsWith('/status/') ||
+    pathname.startsWith('/onboarding');
+
   if (isPublicPage) {
     return NextResponse.next();
   }
 
-  // 4. Cryptographic session verification for all dashboard routes (§2)
+  // 6. Cryptographic session verification for all dashboard routes (§2)
   const rawSession = request.cookies.get('baari_session')?.value;
   const session = await verifySession(rawSession);
 

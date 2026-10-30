@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Button, Input } from '@baari/ui';
-import { Search, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default function StatusLookupPage() {
   const router = useRouter();
@@ -17,10 +17,10 @@ export default function StatusLookupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-inset flex items-center justify-center p-4">
+    <main className="min-h-screen bg-bg-inset flex items-center justify-center p-4" role="main">
       <div className="w-full max-w-sm space-y-4 text-center">
         <div className="space-y-1">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-primary text-white font-bold text-lg">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-primary text-white font-bold text-lg" aria-hidden="true">
             ब
           </div>
           <h1 className="text-lg font-bold text-dark">Live Queue Status</h1>
@@ -30,8 +30,10 @@ export default function StatusLookupPage() {
         <Card className="p-6 space-y-4 bg-white shadow-minimal">
           <form onSubmit={handleLookup} className="space-y-3 text-left">
             <div>
-              <label className="text-xs font-medium text-dark">Apna Token Number Daalein</label>
+              <label htmlFor="tokenNumber" className="text-xs font-medium text-dark">Apna Token Number Daalein</label>
               <Input
+                id="tokenNumber"
+                name="tokenNumber"
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
                 placeholder="e.g. S-07 ya K-04"
@@ -39,7 +41,7 @@ export default function StatusLookupPage() {
                 required
               />
             </div>
-            <Button variant="primary" size="md" className="w-full text-xs" type="submit">
+            <Button variant="primary" size="md" className="w-full text-xs" type="submit" aria-label="Check live queue status">
               Check Live Status <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </Button>
           </form>
@@ -48,6 +50,6 @@ export default function StatusLookupPage() {
           </p>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }

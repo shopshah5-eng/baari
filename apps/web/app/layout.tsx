@@ -17,11 +17,21 @@ export const metadata: Metadata = {
     description: 'Aapki baari, WhatsApp par.',
     url: 'https://baari-inky.vercel.app',
     siteName: 'Baari',
-    locale: 'hi_IN',
+    locale: 'en_IN',
     type: 'website',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Baari WhatsApp Front Office'
+      }
+    ]
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 
@@ -31,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="hi" className={inter.variable}>
+    <html lang="en-IN" className={inter.variable}>
       <body className={`${inter.className} min-h-screen bg-bg-inset text-dark antialiased focus-visible:outline-primary`}>
         {children}
       </body>

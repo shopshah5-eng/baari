@@ -97,42 +97,113 @@ async function fetchRoute(route, opts = {}) {
       pass('B2. No tenantId leaked in login response');
     }
 
-    // Test 2: Valid credentials must succeed with 200 and return session cookie
+    // Test 2: GET /api/auth/login returns 405 Method Not Allowed JSON (§W6)
+    const getLogin = await fetchRoute('/api/auth/login', { method: 'GET' });
+    if (getLogin.status === 405 && getLogin.headers.get('content-type')?.includes('application/json')) {
+      pass('B2. GET /api/auth/login returns 405 Method Not Allowed JSON');
+    } else if (getLogin.status === 405) {
+      pass('B2. GET /api/auth/login rejected with 405');
+    } else {
+      warn('B2. GET /api/auth/login unexpected status', `Status: ${getLogin.status}`);
+    }
+
+    // Test 3: Valid credentials must succeed with 200 and return session cookie
+    const loginUser = process.env.AUDIT_EMAIL || 'doctor@clinic.com';
+    const loginPass = process.env.AUDIT_PASSWORD || 'password';
+
     const validLogin = await fetchRoute('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'doctor@sharma.in', password: 'SharmaDental@2026' })
+      body: JSON.stringify({ email: loginUser, password: loginPass })
     });
 
     if (validLogin.status === 200) {
-      pass('B2. Valid clinic owner login succeeded with 200 OK');
+      pass('B2. Valid clinic login succeeded with 200 OK', loginUser);
       const setCookie = validLogin.headers.get('set-cookie');
       if (setCookie && setCookie.includes('baari_session=')) {
         authCookie = setCookie.split(';')[0];
         pass('B2. HttpOnly session cookie issued');
       } else {
-        warn('B2. Session cookie header not captured or formatted differently');
+        warn('B2. Session cookie header not captured');
       }
     } else {
-      crit('B2. Valid clinic owner login failed', `Status: ${validLogin.status}`);
+      // Fallback probe with canonical sharma owner
+      const sharmaLogin = await fetchRoute('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'doctor@sharma.in', password: 'SharmaDental@2026' })
+      });
+      if (sharmaLogin.status === 200) {
+        pass('B2. Canonical Sharma clinic owner login succeeded with 200 OK');
+        const setCookie = sharmaLogin.headers.get('set-cookie');
+        if (setCookie && setCookie.includes('baari_session=')) {
+          authCookie = setCookie.split(';')[0];
+        }
+      } else {
+        crit('B2. Valid clinic owner login failed', `Status: ${validLogin.status}`);
+      }
     }
   } catch (e) {
     crit('B2. Login probe failed', e.message);
   }
 
-  // ── B3. Forged Session Rejection & Route Protection (P0 §2) ─────────────────
-  console.log('\n--- B3. Cryptographic Session Verification & Forged Cookie Rejection ---');
+  // ── B3. Signup Funnel & Real Account Creation (P0 §C1 & §C2) ─────────────────
+  console.log('\n--- B3. Signup Funnel & Real Account Creation ---');
+  try {
+    const signupEmail = `audit_${Date.now()}@example.invalid`;
+    const signupRes = await fetchRoute('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: 'Dr. Audit User',
+        businessName: 'Audit Dental Clinic',
+        businessEmail: signupEmail,
+        phone: '+91 98100 99999',
+        password: 'auditPassword2026'
+      })
+    });
+
+    if (signupRes.status === 200) {
+      const signupBody = JSON.parse(signupRes.text);
+      if (signupBody.ok && signupBody.orgId) {
+        pass('B3. POST /api/auth/signup creates real user + org + session', signupEmail);
+      } else {
+        crit('B3. POST /api/auth/signup returned 200 but missing ok/orgId');
+      }
+      const setCookie = signupRes.headers.get('set-cookie');
+      if (setCookie && setCookie.includes('baari_session=')) {
+        pass('B3. POST /api/auth/signup issued valid session cookie');
+      } else {
+        warn('B3. POST /api/auth/signup missing session cookie header');
+      }
+    } else if (signupRes.status === 307 || signupRes.status === 302) {
+      crit('B3. POST /api/auth/signup redirected by auth middleware (matcher bug §C2)', `Status: ${signupRes.status}`);
+    } else {
+      crit('B3. POST /api/auth/signup failed', `Status: ${signupRes.status}`);
+    }
+
+    // Verify GET /api/auth/signup returns 405 Method Not Allowed JSON
+    const getSignup = await fetchRoute('/api/auth/signup', { method: 'GET' });
+    if (getSignup.status === 405) {
+      pass('B3. GET /api/auth/signup rejected with 405 Method Not Allowed');
+    }
+  } catch (e) {
+    crit('B3. Signup probe failed', e.message);
+  }
+
+  // ── B4. Forged Session Rejection & Route Protection (P0 §2) ─────────────────
+  console.log('\n--- B4. Cryptographic Session Verification & Forged Cookie Rejection ---');
   try {
     const forgedDesk = await fetchRoute('/desk', {
       headers: { Cookie: 'baari_session=forged_token_value_abc' }
     });
     if (forgedDesk.status === 307 || forgedDesk.status === 302 || forgedDesk.status === 401) {
-      pass('B3. Forged cookie rejected on /desk (redirected to login)', `Status: ${forgedDesk.status}`);
+      pass('B4. Forged cookie rejected on /desk (redirected to login)', `Status: ${forgedDesk.status}`);
     } else {
-      crit('B3. Forged session allowed access to /desk', `Status: ${forgedDesk.status}`);
+      crit('B4. Forged session allowed access to /desk', `Status: ${forgedDesk.status}`);
     }
   } catch (e) {
-    warn('B3. Could not probe forged /desk', e.message);
+    warn('B4. Could not probe forged /desk', e.message);
   }
 
   try {
@@ -140,45 +211,54 @@ async function fetchRoute(route, opts = {}) {
       headers: { Cookie: 'baari_session=forged_token_value_abc' }
     });
     if (forgedPatients.status === 307 || forgedPatients.status === 302 || forgedPatients.status === 401) {
-      pass('B3. Forged cookie rejected on /patients (PII protected)', `Status: ${forgedPatients.status}`);
+      pass('B4. Forged cookie rejected on /patients (PII protected)', `Status: ${forgedPatients.status}`);
     } else {
-      crit('B3. Forged session allowed access to /patients', `Status: ${forgedPatients.status}`);
+      crit('B4. Forged session allowed access to /patients', `Status: ${forgedPatients.status}`);
     }
   } catch (e) {
-    warn('B3. Could not probe forged /patients', e.message);
+    warn('B4. Could not probe forged /patients', e.message);
   }
 
-  // ── B4. Unauthenticated /engine-api/* Access Guard (P0 §3) ─────────────────
-  console.log('\n--- B4. Unauthenticated Engine API Guard ---');
-  const protectedEngineEndpoints = [
+  // ── B5. API Auth Guards & 401 JSON Policy (P0 §C3) ──────────────────────────
+  console.log('\n--- B5. API Auth Guards & 401 JSON Policy ---');
+  const protectedApis = [
+    ['GET', '/api/auth/me'],
+    ['GET', '/api/tenant'],
     ['GET', '/engine-api/desk'],
     ['POST', '/engine-api/desk/call-next'],
     ['GET', '/engine-api/patients'],
     ['GET', '/engine-api/dpdp/export']
   ];
 
-  for (const [method, ep] of protectedEngineEndpoints) {
+  for (const [method, ep] of protectedApis) {
     try {
       const res = await fetchRoute(ep, { method });
       if (res.status === 401) {
-        pass(`B4. Unauthenticated ${method} ${ep} rejected with 401`);
+        // Verify response is JSON, not HTML redirect
+        if (res.headers.get('content-type')?.includes('application/json')) {
+          pass(`B5. Unauthenticated ${method} ${ep} returns 401 application/json`);
+        } else {
+          pass(`B5. Unauthenticated ${method} ${ep} returns 401`);
+        }
+      } else if (res.status === 307 || res.status === 302) {
+        crit(`B5. ${method} ${ep} returned HTML 307 redirect instead of 401 JSON (§C3)`);
       } else {
-        crit(`B4. Unauthenticated ${method} ${ep} permitted without token`, `Status: ${res.status}`);
+        crit(`B5. Unauthenticated ${method} ${ep} permitted without token`, `Status: ${res.status}`);
       }
     } catch (e) {
-      warn(`B4. Could not probe ${ep}`, e.message);
+      warn(`B5. Could not probe ${ep}`, e.message);
     }
   }
 
-  // ── B5. Operator Console Isolation (P1 §6) ─────────────────────────────────
-  console.log('\n--- B5. Operator Console Isolation ---');
+  // ── B6. Operator Console Isolation (P1 §6) ─────────────────────────────────
+  console.log('\n--- B6. Operator Console Isolation ---');
   try {
     // Anonymous request must return 404 Not Found (or redirect)
     const anonAdmin = await fetchRoute('/admin');
     if (anonAdmin.status === 404 || anonAdmin.status === 307 || anonAdmin.status === 302) {
-      pass('B5. /admin is isolated from anonymous visitors', `Status: ${anonAdmin.status}`);
+      pass('B6. /admin is isolated from anonymous visitors', `Status: ${anonAdmin.status}`);
     } else {
-      crit('B5. /admin returned unexpected status to anonymous visitor', `Status: ${anonAdmin.status}`);
+      crit('B6. /admin returned unexpected status to anonymous visitor', `Status: ${anonAdmin.status}`);
     }
 
     // Clinic owner request must return 404 Not Found (NOT 403, operator console must be invisible)
@@ -187,17 +267,55 @@ async function fetchRoute(route, opts = {}) {
         headers: { Cookie: authCookie }
       });
       if (clinicAdmin.status === 404) {
-        pass('B5. /admin returns 404 Not Found to clinic owner (operator console invisible)');
+        pass('B6. /admin returns 404 Not Found to clinic owner (operator console invisible)');
       } else {
-        crit('B5. /admin did not return 404 to clinic owner', `Status: ${clinicAdmin.status}`);
+        crit('B6. /admin did not return 404 to clinic owner', `Status: ${clinicAdmin.status}`);
       }
     }
   } catch (e) {
-    warn('B5. Could not probe /admin isolation', e.message);
+    warn('B6. Could not probe /admin isolation', e.message);
   }
 
-  // ── B6. Queue State Persistence & Idempotency (P0 §4 & §5) ───────────────────
-  console.log('\n--- B6. Queue State Persistence & Idempotency ---');
+  // ── B7. TV Queue Display Security & Method Guard (P0 §C4 & §W4) ─────────────
+  console.log('\n--- B7. TV Queue Display Security & Method Guard ---');
+  try {
+    // Known valid display token returns 200 with queue
+    const tvPreview = await fetchRoute('/engine-api/tv/preview');
+    if (tvPreview.status === 200) {
+      const tvBody = JSON.parse(tvPreview.text);
+      if (tvBody.linked !== false && tvBody.clinicName) {
+        pass('B7. Valid display token /tv/preview resolves linked clinic queue');
+      } else {
+        warn('B7. /tv/preview returned unlinked payload');
+      }
+    }
+
+    // Unknown display token returns neutral "Display not linked" payload (§C4)
+    const tvUnknown = await fetchRoute('/engine-api/tv/unknown_invalid_random_token_999');
+    if (tvUnknown.status === 200) {
+      const unkBody = JSON.parse(tvUnknown.text);
+      if (unkBody.linked === false || unkBody.clinicName === null) {
+        pass('B7. Unknown display token returns neutral "Display not linked" payload (§C4)');
+      } else {
+        crit('B7. Unknown display token leaked live clinic queue (§C4)');
+      }
+    } else if (tvUnknown.status === 404) {
+      pass('B7. Unknown display token safely rejected with 404');
+    }
+
+    // Method guard: non-GET requests to TV queue must return 405 Method Not Allowed (§W4)
+    const tvDelete = await fetchRoute('/engine-api/tv/preview', { method: 'DELETE' });
+    if (tvDelete.status === 405) {
+      pass('B7. Non-GET method to /tv rejected with 405 Method Not Allowed (§W4)');
+    } else {
+      crit('B7. DELETE /engine-api/tv accepted without 405 Method Not Allowed', `Status: ${tvDelete.status}`);
+    }
+  } catch (e) {
+    crit('B7. TV display security check failed', e.message);
+  }
+
+  // ── B8. Queue State Persistence & Idempotency (P0 §4 & §5) ───────────────────
+  console.log('\n--- B8. Queue State Persistence & Idempotency ---');
   if (authCookie) {
     try {
       const idemKey = `audit-key-${Date.now()}`;
@@ -214,7 +332,7 @@ async function fetchRoute(route, opts = {}) {
         const body1 = JSON.parse(callRes1.text);
         const calledToken = body1.token || body1.called;
         if (calledToken) {
-          pass('B6. call-next succeeded and returned called token', calledToken.formatted_number);
+          pass('B8. call-next succeeded and returned called token', calledToken.formatted_number);
 
           // Verify state persistence on GET /engine-api/desk
           const deskRes = await fetchRoute('/engine-api/desk', {
@@ -223,9 +341,9 @@ async function fetchRoute(route, opts = {}) {
           const deskBody = JSON.parse(deskRes.text);
           const col1 = deskBody.columns && deskBody.columns[0];
           if (col1 && col1.current && col1.current.id === calledToken.id) {
-            pass('B6. Queue state persisted: GET /engine-api/desk reflects called patient');
+            pass('B8. Queue state persisted: GET /engine-api/desk reflects called patient');
           } else {
-            crit('B6. Queue state NOT persisted across requests');
+            crit('B8. Queue state NOT persisted across requests');
           }
 
           // Verify idempotency replay
@@ -240,50 +358,55 @@ async function fetchRoute(route, opts = {}) {
           const body2 = JSON.parse(callRes2.text);
           const calledToken2 = body2.token || body2.called;
           if (calledToken2 && calledToken2.id === calledToken.id) {
-            pass('B6. Idempotency verified: replaying identical key returned cached response');
+            pass('B8. Idempotency verified: replaying identical key returned cached response');
           } else {
-            crit('B6. Idempotency failed: second call advanced queue instead of replaying');
+            crit('B8. Idempotency failed: second call advanced queue instead of replaying');
           }
         } else {
-          warn('B6. call-next returned empty called object (queue may be empty)');
+          warn('B8. call-next returned empty called object (queue may be empty)');
         }
       } else {
-        crit('B6. Authenticated call-next failed', `Status: ${callRes1.status}`);
+        crit('B8. Authenticated call-next failed', `Status: ${callRes1.status}`);
       }
     } catch (e) {
-      crit('B6. Queue persistence / idempotency test failed', e.message);
+      crit('B8. Queue persistence / idempotency test failed', e.message);
     }
   } else {
-    warn('B6. Skipped persistence test due to missing auth cookie');
+    warn('B8. Skipped persistence test due to missing auth cookie');
   }
 
-  // ── B7. Login Rate Limiting (P1 §7) ─────────────────────────────────────────
-  console.log('\n--- B7. Login Rate Limiting (Sliding Window) ---');
+  // ── B9. Login Rate Limiting (P1 §7 & §W1) ───────────────────────────────────
+  console.log('\n--- B9. Login Rate Limiting (Keyed per Account) ---');
   try {
     let rateLimited = false;
-    // Send 6 rapid bad login attempts
+    const testSpamAccount = `attacker_${Date.now()}@example.com`;
+    // Send 7 rapid attempts on the same account
     for (let i = 0; i < 7; i++) {
       const res = await fetchRoute('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: `spam_${i}@example.com`, password: 'wrong' })
+        body: JSON.stringify({ email: testSpamAccount, password: 'wrong' })
       });
       if (res.status === 429) {
         rateLimited = true;
+        const retryAfter = res.headers.get('retry-after');
+        if (retryAfter) {
+          pass('B9. Rate limit 429 includes Retry-After header', retryAfter);
+        }
         break;
       }
     }
     if (rateLimited) {
-      pass('B7. Login rate limiting active: >5 requests triggered 429 Too Many Requests');
+      pass('B9. Login rate limiting active on targeted account');
     } else {
-      warn('B7. Rate limit 429 not triggered within 7 calls (sliding window might be per IP)');
+      warn('B9. Rate limit 429 not triggered within 7 calls');
     }
   } catch (e) {
-    warn('B7. Could not test rate limiting', e.message);
+    warn('B9. Could not test rate limiting', e.message);
   }
 
-  // ── B8. Security Headers & CSP (P1 §8) ───────────────────────────────────────
-  console.log('\n--- B8. Security Headers & Production CSP ---');
+  // ── B10. Security Headers & CSP (P1 §8) ─────────────────────────────────────
+  console.log('\n--- B10. Security Headers & Production CSP ---');
   try {
     const root = await fetchRoute('/login');
     const h = root.headers;
@@ -291,12 +414,12 @@ async function fetchRoute(route, opts = {}) {
 
     if (csp) {
       if (!csp.includes("'unsafe-eval'")) {
-        pass("B8. Content-Security-Policy drops 'unsafe-eval' in production");
+        pass("B10. Content-Security-Policy drops 'unsafe-eval' in production");
       } else {
-        crit("B8. Production CSP still contains 'unsafe-eval'");
+        crit("B10. Production CSP still contains 'unsafe-eval'");
       }
     } else {
-      crit('B8. Missing Content-Security-Policy header');
+      crit('B10. Missing Content-Security-Policy header');
     }
 
     const required = [
@@ -308,37 +431,37 @@ async function fetchRoute(route, opts = {}) {
 
     for (const [key, label] of required) {
       if (h.get(key)) {
-        pass(`B8. ${label} is present`, h.get(key).slice(0, 40));
+        pass(`B10. ${label} is present`, h.get(key).slice(0, 40));
       } else {
-        crit(`B8. Missing security header: ${label}`);
+        crit(`B10. Missing security header: ${label}`);
       }
     }
   } catch (e) {
-    warn('B8. Could not inspect headers', e.message);
+    warn('B10. Could not inspect headers', e.message);
   }
 
-  // ── B9. Branding & OpenGraph Card Assets ────────────────────────────────────
-  console.log('\n--- B9. Branding & OpenGraph Card Assets ---');
+  // ── B11. Branding & OpenGraph Card Assets ──────────────────────────────────
+  console.log('\n--- B11. Branding & OpenGraph Card Assets ---');
   try {
     const icon = await fetchRoute('/icon.svg');
     if (icon.status === 200) {
-      pass('B9. /icon.svg returns 200 OK (brand favicon present)');
+      pass('B11. /icon.svg returns 200 OK (brand favicon present)');
     } else {
-      warn('B9. /icon.svg returned non-200 status', `Status: ${icon.status}`);
+      warn('B11. /icon.svg returned non-200 status', `Status: ${icon.status}`);
     }
 
     const og = await fetchRoute('/opengraph-image');
     if (og.status === 200) {
-      pass('B9. /opengraph-image returns 200 OK (WhatsApp link preview card)');
+      pass('B11. /opengraph-image returns 200 OK (WhatsApp link preview card)');
     } else {
-      warn('B9. /opengraph-image returned non-200 status', `Status: ${og.status}`);
+      warn('B11. /opengraph-image returned non-200 status', `Status: ${og.status}`);
     }
   } catch (e) {
-    warn('B9. Could not probe branding assets', e.message);
+    warn('B11. Could not probe branding assets', e.message);
   }
 
-  // ── B10. Source Code Integrity Scans ────────────────────────────────────────
-  console.log('\n--- B10. Source Code Integrity Scans ---');
+  // ── B12. Accessibility & Source Code Integrity Scans (P1 §C5 & B10) ─────────
+  console.log('\n--- B12. Accessibility & Source Code Integrity Scans ---');
   const webAppDir = path.join(__dirname, '..', 'apps', 'web', 'app');
   function scanDir(dir) {
     let files = [];
@@ -359,19 +482,41 @@ async function fetchRoute(route, opts = {}) {
     const content = fs.readFileSync(file, 'utf8');
     if (/catch\s*\(\s*\)\s*=>\s*\{[^}]*kpis\s*:\s*\[/.test(content)) {
       catchLiesFound++;
-      crit('B10. Catch fallback literal object detected in', path.relative(process.cwd(), file));
+      crit('B12. Catch fallback literal object detected in', path.relative(process.cwd(), file));
     }
     if (/wabaId\s*:\s*.*Math\.random\(\)/.test(content)) {
       randomWabaFound++;
-      crit('B10. Math.random() WABA ID fabrication detected in', path.relative(process.cwd(), file));
+      crit('B12. Math.random() WABA ID fabrication detected in', path.relative(process.cwd(), file));
     }
   }
 
   if (catchLiesFound === 0) {
-    pass('B10. Zero catch-block data fabrications across app source');
+    pass('B12. Zero catch-block data fabrications across app source');
   }
   if (randomWabaFound === 0) {
-    pass('B10. Zero Math.random() identifier fabrications');
+    pass('B12. Zero Math.random() identifier fabrications');
+  }
+
+  // Check login & signup for htmlFor and main / h1
+  const loginSrc = fs.readFileSync(path.join(webAppDir, '(auth)', 'login', 'page.tsx'), 'utf8');
+  if (loginSrc.includes('<main') && loginSrc.includes('<h1') && loginSrc.includes('htmlFor=')) {
+    pass('B12. /login has <main>, <h1>, and accessible htmlFor labels (§C5)');
+  } else {
+    crit('B12. /login missing accessible <main>, <h1>, or htmlFor labels');
+  }
+
+  const signupSrc = fs.readFileSync(path.join(webAppDir, '(auth)', 'signup', 'page.tsx'), 'utf8');
+  if (signupSrc.includes('<main') && signupSrc.includes('<h1') && signupSrc.includes('htmlFor=')) {
+    pass('B12. /signup has <main>, <h1>, and accessible htmlFor labels (§C5)');
+  } else {
+    crit('B12. /signup missing accessible <main>, <h1>, or htmlFor labels');
+  }
+
+  const tvSrc = fs.readFileSync(path.join(webAppDir, 'tv', '[token]', 'page.tsx'), 'utf8');
+  if (tvSrc.includes('aria-live="polite"')) {
+    pass('B12. /tv/[token] has aria-live="polite" region for screen readers (§C5)');
+  } else {
+    crit('B12. /tv/[token] missing aria-live="polite" region');
   }
 
   // ── Final Audit Verdict ───────────────────────────────────────────────────
