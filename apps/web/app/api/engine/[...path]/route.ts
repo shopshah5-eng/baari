@@ -14,7 +14,10 @@ import {
   skipToken,
   recallToken,
   addProvider,
-  updateOrgOnboarding
+  updateOrgOnboarding,
+  noshowConsultation,
+  skipConsultation,
+  updateSettings
 } from '@/lib/store-serverless';
 import { verifySession } from '@/lib/auth';
 
@@ -253,6 +256,27 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
     const body = await request.json().catch(() => ({}));
     const { tokenId, providerId } = body;
     const result = markDone(orgId, tokenId, providerId);
+    return NextResponse.json(result);
+  }
+
+  if (subpath === 'cabin/noshow' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { tokenId } = body;
+    const result = noshowConsultation(orgId, tokenId);
+    return NextResponse.json(result);
+  }
+
+  if (subpath === 'cabin/skip' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { tokenId } = body;
+    const result = skipConsultation(orgId, tokenId);
+    return NextResponse.json(result);
+  }
+
+  // Settings update
+  if (subpath === 'settings' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const result = updateSettings(orgId, body);
     return NextResponse.json(result);
   }
 

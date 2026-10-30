@@ -1,11 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge } from '@baari/ui';
 import { Download, FileText, TrendingUp, AlertTriangle, ArrowUpRight } from 'lucide-react';
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<'month' | 'today'>('month');
+  const [clinicName, setClinicName] = useState('Clinic Workspace');
+
+  useEffect(() => {
+    fetch('/api/tenant')
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        if (d && d.tenant) {
+          setClinicName(d.tenant.name || 'Clinic Workspace');
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const metrics = {
     enquiries: 62,
@@ -20,9 +32,37 @@ export default function ReportsPage() {
     noShowRate: '4.8%'
   };
 
+  const handleExportCSV = () => {
+    const csvContent = [
+      ['Metric', 'Value'],
+      ['Revenue Collected (INR)', metrics.collectedInr],
+      ['Recovered by Baari Follow-ups (INR)', metrics.recoveredInr],
+      ['Leakage Lost Opportunity (INR)', metrics.leakageInr],
+      ['Total Enquiries', metrics.enquiries],
+      ['Confirmed Bookings', metrics.bookings],
+      ['Consultations Completed', metrics.completed],
+      ['Average Wait Minutes', metrics.avgWaitMin],
+      ['No-Show Rate', metrics.noShowRate]
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `baari_revenue_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-xl font-bold text-dark">Performance & Revenue Report</h1>
           <p className="text-xs text-muted">
@@ -31,11 +71,11 @@ export default function ReportsPage() {
         </div>
 
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={handleExportCSV} className="text-xs">
             <Download className="w-3.5 h-3.5 mr-1" />
             Export CSV
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={handlePrintPDF} className="text-xs">
             <FileText className="w-3.5 h-3.5 mr-1" />
             Download PDF Report
           </Button>
@@ -97,15 +137,15 @@ export default function ReportsPage() {
       <Card className="space-y-3 bg-bg-inset border-border">
         <h3 className="text-sm font-semibold text-dark">Automated Monthly Owner Digest</h3>
         <div className="p-4 bg-white rounded-[8px] border border-border font-mono text-xs text-dark/90 leading-relaxed max-w-lg">
-          📊 *Dr. Sharma Dental — Monthly Summary*<br />
+          📊 *{clinicName} — Monthly Summary*<br />
           ━━━━━━━━━━━━━━━━━━<br />
-          • Enquiries: 62<br />
-          • Bookings: 41 (66% conversion)<br />
-          • Revenue collected: ₹58,400<br />
-          • *Recovered by follow-ups: ₹11,200*<br />
-          • ⚠️ Unanswered inquiries: 7 (₹19,000 lost opportunity)<br />
-          • New 5★ Google reviews: 9<br />
-          • Average wait time: 19 min<br />
+          • Enquiries: {metrics.enquiries}<br />
+          • Bookings: {metrics.bookings} (66% conversion)<br />
+          • Revenue collected: ₹{metrics.collectedInr.toLocaleString('en-IN')}<br />
+          • *Recovered by follow-ups: ₹{metrics.recoveredInr.toLocaleString('en-IN')}*<br />
+          • ⚠️ Unanswered inquiries: {metrics.unansweredEnquiries} (₹19,000 lost opportunity)<br />
+          • New 5★ Google reviews: {metrics.newReviews}<br />
+          • Average wait time: {metrics.avgWaitMin} min<br />
           ━━━━━━━━━━━━━━━━━━<br />
           _Baari Front Desk on Autopilot_
         </div>

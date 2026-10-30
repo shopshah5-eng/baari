@@ -549,6 +549,71 @@ export function markDone(orgId: string, tokenId?: string, providerId?: string) {
 }
 
 /**
+ * Handle Doctor Cabin No-Show
+ */
+export function noshowConsultation(orgId: string, tokenId?: string) {
+  const state = loadState();
+  const token = tokenId
+    ? state.tokens.find(t => t.org_id === orgId && t.id === tokenId)
+    : state.tokens.find(t => t.org_id === orgId && (t.state === 'CALLED' || t.state === 'IN_CONSULT'));
+
+  if (!token) return { error: 'No active consultation found' };
+  token.state = 'SKIPPED';
+  saveState(state);
+  return { ok: true, tokenId: token.id, state: 'SKIPPED' };
+}
+
+/**
+ * Handle Doctor Cabin Hold / Skip
+ */
+export function skipConsultation(orgId: string, tokenId?: string) {
+  const state = loadState();
+  const token = tokenId
+    ? state.tokens.find(t => t.org_id === orgId && t.id === tokenId)
+    : state.tokens.find(t => t.org_id === orgId && (t.state === 'CALLED' || t.state === 'IN_CONSULT'));
+
+  if (!token) return { error: 'No active consultation found' };
+  token.state = 'HOLD';
+  saveState(state);
+  return { ok: true, tokenId: token.id, state: 'HOLD' };
+}
+
+/**
+ * Update Clinic Settings
+ */
+export function updateSettings(
+  orgId: string,
+  data: { clinicName?: string; hours?: string; displayToken?: string }
+) {
+  const state = loadState();
+  let org = state.orgs.find(o => o.id === orgId);
+  if (!org) {
+    org = { id: orgId, name: data.clinicName || 'Clinic Workspace', mode: 'clinic' };
+    state.orgs.push(org);
+  } else if (data.clinicName) {
+    org.name = data.clinicName.trim();
+  }
+
+  if (data.displayToken) {
+    const cleanToken = data.displayToken.trim();
+    // Update or register display token
+    const existing = state.display_tokens.find(dt => dt.org_id === orgId && !dt.revoked_at);
+    if (existing) {
+      existing.token = cleanToken;
+    } else {
+      state.display_tokens.push({
+        token: cleanToken,
+        org_id: orgId,
+        revoked_at: null
+      });
+    }
+  }
+
+  saveState(state);
+  return { ok: true, orgId, name: org.name };
+}
+
+/**
  * Get unified Desk State with current serving token and waiting list per provider
  */
 export function getDeskState(orgId: string) {
