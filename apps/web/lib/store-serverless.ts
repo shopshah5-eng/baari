@@ -120,7 +120,7 @@ export function callNext(orgId: string, providerId: string, idempotencyKey?: str
     (t) => (t.org_id === orgId || orgId === 'dr-sharma') && t.provider_id === providerId && (t.state === 'CALLED' || t.state === 'IN_CONSULT')
   );
   if (currentCalled) {
-    const res = { ok: true, token: currentCalled, idempotent: true };
+    const res = { ok: true, token: currentCalled, called: currentCalled, idempotent: true };
     if (idempotencyKey) {
       state.idempotency[idempotencyKey] = { response: res, timestamp: Date.now() };
       saveState(state);
@@ -162,7 +162,8 @@ export function callNext(orgId: string, providerId: string, idempotencyKey?: str
 
   const response = {
     ok: true,
-    token: nextToken
+    token: nextToken,
+    called: nextToken
   };
 
   // 5. Store in idempotency ledger

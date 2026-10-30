@@ -212,8 +212,9 @@ async function fetchRoute(route, opts = {}) {
 
       if (callRes1.status === 200) {
         const body1 = JSON.parse(callRes1.text);
-        if (body1.called) {
-          pass('B6. call-next succeeded and returned called token', body1.called.formatted_number);
+        const calledToken = body1.token || body1.called;
+        if (calledToken) {
+          pass('B6. call-next succeeded and returned called token', calledToken.formatted_number);
 
           // Verify state persistence on GET /engine-api/desk
           const deskRes = await fetchRoute('/engine-api/desk', {
@@ -221,7 +222,7 @@ async function fetchRoute(route, opts = {}) {
           });
           const deskBody = JSON.parse(deskRes.text);
           const col1 = deskBody.columns && deskBody.columns[0];
-          if (col1 && col1.current && col1.current.id === body1.called.id) {
+          if (col1 && col1.current && col1.current.id === calledToken.id) {
             pass('B6. Queue state persisted: GET /engine-api/desk reflects called patient');
           } else {
             crit('B6. Queue state NOT persisted across requests');
@@ -237,7 +238,8 @@ async function fetchRoute(route, opts = {}) {
             body: JSON.stringify({ providerId: 'p1', idempotencyKey: idemKey })
           });
           const body2 = JSON.parse(callRes2.text);
-          if (body2.called && body2.called.id === body1.called.id) {
+          const calledToken2 = body2.token || body2.called;
+          if (calledToken2 && calledToken2.id === calledToken.id) {
             pass('B6. Idempotency verified: replaying identical key returned cached response');
           } else {
             crit('B6. Idempotency failed: second call advanced queue instead of replaying');
