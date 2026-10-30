@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Environment files
+.env
+.env*.local
+*.pem
+
+# Local databases, reports & sessions
+data/db.json
+data/sessions/
+data/reports/
+data/invoices/
+data/logs/
+data/assets/
+apps/engine/data/db.json
+apps/engine/data/sessions/
+apps/engine/data/reports/
+apps/engine/data/invoices/
+apps/engine/data/logs/
+apps/engine/data/assets/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System
+.DS_Store
+Thumbs.db

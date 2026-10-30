@@ -1,0 +1,86 @@
+<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Billing</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .plan{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff;flex:1;min-width:200px;cursor:pointer}
+  .plan.on{border-color:var(--teal);box-shadow:0 0 0 3px rgba(11,122,107,.12)}
+  .plan b{font-size:20px;display:block}
+  .qr{background:#fff;border-radius:16px;padding:10px;display:inline-block;border:1px solid var(--line)}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <h1 style="font-size:22px">Billing</h1>
+  <div class="muted">UPI QR (zero MDR) · Razorpay · GST invoice</div>
+  <div class="row" style="margin-top:14px;align-items:start">
+    <div class="card pad" style="flex:1.2;min-width:340px">
+      <div class="tiny">Plan chunein</div>
+      <div class="row" id="plans" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:14px">
+        <div style="flex:1"><label>Period</label>
+          <select id="period"><option value="monthly">Monthly</option><option value="annual">Annual (2 months free)</option></select></div>
+        <div style="flex:1"><label>Payment</label>
+          <select id="method"><option value="upi_qr">UPI QR</option><option value="razorpay">Razorpay</option></select></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="pay('setup')">Activation (one-time)</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="pay('subscription')">Monthly / Annual</button>
+      </div>
+      <div id="out" style="margin-top:16px"></div>
+    </div>
+    <div class="card pad" style="flex:1;min-width:300px">
+      <div class="tiny">Payments</div>
+      <div id="history" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+<div class="toast"></div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('billing');
+let PLANS={}, sel='growth';
+async function boot(){
+  const r = await fetch('/api/plans').then(x=>x.json()); PLANS=r.plans;
+  document.getElementById('plans').innerHTML = Object.entries(PLANS).filter(([k])=>k!=='pilot').map(([k,p])=>`
+    <div class="plan ${k===sel?'on':''}" onclick="sel='${k}';boot()">
+      <b>${p.name}</b>
+      <div class="muted">₹${p.activation} activation</div>
+      <div style="font-weight:700">₹${p.monthly}/mo · ₹${p.annual}/yr</div>
+    </div>`).join('');
+  loadHistory();
+}
+async function pay(kind){
+  const period=document.getElementById('period').value, method=document.getElementById('method').value;
+  const r = await fetch('/api/'+SLUG+'/billing/pay',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({kind,plan:sel,period,method})}).then(x=>x.json());
+  const q=r.quote, p=r.payment;
+  document.getElementById('out').innerHTML = `
+    <div class="row" style="align-items:center;gap:16px">
+      <div class="qr"><img src="${r.upi.qr}" width="180" height="180" alt="UPI QR"></div>
+      <div style="flex:1">
+        <div class="tiny">Amount</div>
+        <div style="font-size:26px;font-weight:800">₹${p.amount_inr.toLocaleString('en-IN')}</div>
+        <div class="muted">${q.headline}</div>
+        <div class="muted" style="font-size:12.5px">UPI: <b>${r.upi.intent.split('pa=')[1].split('&')[0].replace('%40','@')}</b> · Ref ${p.ref}</div>
+        <div class="row" style="margin-top:10px">
+          <a class="btn btn-sm btn-ghost" href="${r.upi.intent}">UPI app me kholen</a>
+          <button class="btn btn-sm btn-primary" onclick="markPaid('${p.id}')">✅ Payment mil gaya</button>
+        </div>
+        ${r.razorpay && !r.razorpay.ok ? `<div class="muted" style="font-size:12.5px;margin-top:8px">Razorpay: ${r.razorpay.reason} — UPI QR use karein</div>`:''}
+      </div></div>`;
+  loadHistory();
+}
+async function markPaid(id){
+  const r = await fetch('/api/'+SLUG+'/billing/mark-paid/'+id,{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(x=>x.json());
+  toast(r.ok?('✅ Paid · invoice '+r.invoice_no):'fail'); loadHistory();
+}
+async function loadHistory(){
+  const list = await fetch('/api/'+SLUG+'/billing/history').then(x=>x.json());
+  document.getElementById('history').innerHTML = list.length ? list.map(p=>`
+    <div style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <div class="row" style="align-items:center"><b style="flex:1">₹${p.amount_inr} · ${p.kind}</b>
+      <span class="pill ${p.status==='paid'?'live':'warn'}">${p.status}</span></div>
+      <div class="muted" style="font-size:12px">${p.ref} · ${new Date(p.created_at).toLocaleDateString('en-IN')} ${p.gst_invoice_no?'· '+p.gst_invoice_no:''}</div>
+      ${p.status==='paid'?`<a class="btn btn-sm btn-ghost" style="margin-top:6px" target="_blank" href="/api/${SLUG}/billing/invoice/${p.id}.pdf">🧾 GST invoice</a>`:''}
+    </div>`).join('') : '<div class="muted">Koi payment nahi</div>';
+}
+boot();
+</script></body></html>

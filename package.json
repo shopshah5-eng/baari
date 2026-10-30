@@ -1,0 +1,22 @@
+{
+  "name": "baari-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm --prefix apps/engine test",
+    "test:sql": "npm --prefix apps/engine run test:sql",
+    "test:all": "npm --prefix apps/engine run test:all",
+    "dev:engine": "npm --prefix apps/engine run dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev": "concurrently \"npm run dev:engine\" \"npm run dev:web\"",
+    "build": "npm --prefix packages/shared run build && npm --prefix apps/web run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+

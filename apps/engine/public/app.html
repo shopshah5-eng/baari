@@ -1,0 +1,116 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Owner</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .learn{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
+  .learn:last-child{border-bottom:0}
+  .learn .ic{width:30px;height:30px;border-radius:9px;background:var(--mint);display:grid;place-items:center;flex:0 0 auto}
+  .kbd{font-family:ui-monospace,monospace;background:var(--mint);padding:2px 6px;border-radius:5px;font-size:12px}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="row" style="align-items:center;margin-bottom:14px">
+    <div><h1 style="font-size:22px" id="hello">Aaj ka summary</h1><div class="muted" id="sub"></div></div>
+    <div class="spacer"></div>
+    <span class="pill live" id="health">🟢</span>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="row" style="margin-top:16px;align-items:start">
+    <div class="card pad" style="flex:1.4;min-width:330px">
+      <h2 style="font-size:16px;margin-bottom:4px">Baari seekh rahi hai</h2>
+      <div class="muted" style="margin-bottom:6px">Asli consultation time se ETA apne aap sudharta hai</div>
+      <div id="learn"></div>
+    </div>
+    <div class="card pad" style="flex:1;min-width:300px">
+      <h2 style="font-size:16px;margin-bottom:4px">Reviews</h2>
+      <div class="muted">Google link har patient ko — policy-safe</div>
+      <div class="kpis" style="margin-top:12px;grid-template-columns:1fr 1fr">
+        <div class="stat"><span>Average</span><b id="rv-avg">—</b></div>
+        <div class="stat"><span>Ratings</span><b id="rv-n">0</b></div>
+        <div class="stat"><span>Private alerts</span><b id="rv-low" style="color:var(--red)">0</b></div>
+        <div class="stat"><span>Asked</span><b id="rv-asks">0</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card pad" style="margin-top:16px">
+    <div class="row" style="align-items:center">
+      <div><h2 style="font-size:16px">Knowledge base — enquiry ka jawab isi se</h2>
+      <div class="muted">Website, Google listing, price list ya 12 sawaalon se banta hai</div></div>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" onclick="ingest()">🌐 Website se laayein</button>
+    </div>
+    <div class="hr"></div>
+    <div class="row">
+      <input id="q" placeholder="Patient poochhta hai: &quot;RCT ka kitna hai?&quot;" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')ask()">
+      <button class="btn btn-primary" onclick="ask()">Poochhein</button>
+    </div>
+    <div id="ans" style="margin-top:12px"></div>
+    <div class="tiny" style="margin-top:14px">Indexed documents</div>
+    <div id="kb" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card pad" style="margin-top:16px">
+    <h2 style="font-size:16px;margin-bottom:10px">Plan & billing</h2>
+    <div class="row" id="billing"></div>
+  </div>
+</div>
+<div class="toast"></div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('app');
+async function load(){
+  const S = await api('/state');
+  const rev = await api('/revenue');
+  const R = rev.revenue;
+  document.getElementById('hello').textContent = S.org.name + ' — aaj';
+  document.getElementById('sub').textContent = `${S.org.area} · ${S.org.mode} · plan: ${S.org.plan}`;
+  document.getElementById('health').textContent = (S.org.wa.status==='connected'?'🟢 WhatsApp live · ':'🔴 ')+S.org.wa.lane;
+  document.getElementById('kpis').innerHTML = `
+    <div class="stat"><span>Aaj ke patients</span><b class="num">${S.today.total}</b></div>
+    <div class="stat"><span>Waiting abhi</span><b class="num">${S.today.waiting}</b></div>
+    <div class="stat"><span>Collected</span><b class="num">₹${R.collected}</b></div>
+    <div class="stat"><span>Pipeline</span><b class="num">₹${R.pipeline}</b></div>
+    <div class="stat"><span>Recovered</span><b class="num">₹${R.recovered}</b></div>
+    <div class="stat"><span>Leakage</span><b class="num" style="color:var(--red)">₹${R.leakage}</b></div>`;
+
+  document.getElementById('learn').innerHTML = S.providers.map(p=>{
+    const configured = p.avg_minutes, learned = p.learned ? p.learned.ewma : null;
+    const delta = learned ? (learned - configured) : 0;
+    return `<div class="learn"><div class="ic">${learned?'📈':'⏳'}</div>
+      <div style="flex:1"><b>${p.name}</b>
+        <div class="muted" style="font-size:12.5px">${learned
+          ? `Aapne ${configured} min set kiya · asli <b>${learned} min</b> (${p.learned.samples} samples) · ETA auto-updated ${Math.abs(delta)>=1?`<span class="pill ${delta>0?'warn':'live'}">${delta>0?'+':''}${delta.toFixed(1)} min</span>`:''}`
+          : `${configured} min set · ${5-(p.learned?p.learned.samples:0)} consultations ke baad khud sudhrega`}</div></div></div>`;
+  }).join('');
+
+  document.getElementById('rv-avg').textContent = S.reviewStats.avg ? S.reviewStats.avg+'★' : '—';
+  document.getElementById('rv-n').textContent = S.reviewStats.ratings;
+  document.getElementById('rv-low').textContent = S.reviewStats.low;
+  document.getElementById('rv-asks').textContent = S.reviewStats.asks;
+
+  document.getElementById('billing').innerHTML = `
+    <div class="stat" style="flex:1;min-width:180px"><span>Plan</span><b style="font-size:18px">Growth</b><div class="muted">₹4,999 activation · ₹1,999/mo</div></div>
+    <div class="stat" style="flex:1;min-width:180px"><span>Ya annual</span><b style="font-size:18px">₹24,999</b><div class="muted">poore saal, activation free</div></div>
+    <div class="stat" style="flex:1;min-width:180px"><span>Status</span><b style="font-size:18px;color:var(--teal)">Active</b><div class="muted">UPI autopay · next 5 Nov</div></div>`;
+
+  const kb = await fetch('/api/'+SLUG+'/kb').then(r=>r.json());
+  document.getElementById('kb').innerHTML = kb.map(d=>`<div style="padding:6px 0;font-size:13.5px"><span class="pill">${d.source}</span> <b>${d.title}</b> <span class="muted">${d.text.slice(0,90)}…</span></div>`).join('');
+}
+async function ask(){
+  const q = document.getElementById('q').value.trim(); if(!q) return;
+  const r = await fetch('/api/'+SLUG+'/kb/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({q})}).then(x=>x.json());
+  if(!r.hits.length || r.hits[0].score < r.threshold){
+    document.getElementById('ans').innerHTML = `<div class="pill bad">Escalate</div> <span class="muted">Score ${r.hits[0]?r.hits[0].score:'0'} &lt; ${r.threshold} — bot "main clinic se poochh kar batati hoon" bhejta hai. Galat price se better hai.</span>`;
+  } else {
+    const top = r.hits[0];
+    document.getElementById('ans').innerHTML = `<div class="pill live">Grounded answer (${top.score})</div><p style="margin:8px 0 0">${top.text}</p>
+      <div class="muted" style="font-size:12px;margin-top:6px">Source: ${top.title} · sirf isi text se — number/price hallucinate nahi hota</div>`;
+  }
+}
+async function ingest(){ const r = await fetch('/api/'+SLUG+'/kb/ingest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:'https://drsharmadental.in'})}).then(x=>x.json()); toast(`🌐 ${r.added} documents website se add hue`); load(); }
+load(); setInterval(load, 10000);
+</script></body></html>

@@ -1,0 +1,20 @@
+# Baari — automatic HTTPS. Replace the domain before deploying.
+baari.clinic, www.baari.clinic {
+  encode zstd gzip
+
+  # security headers (the app sets its own too; Caddy adds HSTS at the edge)
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    -Server
+  }
+
+  # never cache the queue/TV endpoints or the service worker
+  @noCache path /api/* /desk* /tv* /cabin* /stream*
+  header @noCache Cache-Control "no-store"
+
+  # the SSE endpoints must not be buffered
+  reverse_proxy /api/*/stream baari:3000 { flush_interval -1 }
+  reverse_proxy /api/*/wa/qr baari:3000 { flush_interval -1 }
+
+  reverse_proxy baari:3000
+}

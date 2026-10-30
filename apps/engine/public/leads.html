@@ -1,0 +1,98 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Leads & Revenue</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .grp{margin-bottom:16px}
+  .grp h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--grey);margin-bottom:8px}
+  .li{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .li:last-child{border-bottom:0}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .d-red{background:var(--red)}.d-amber{background:var(--amber)}.d-teal{background:var(--teal)}
+  .money{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .report{background:linear-gradient(135deg,#0B7A6B,#0E8E7C);color:#fff;border-radius:16px;padding:18px}
+  .report .l{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.15);font-size:14px}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="row" style="margin-bottom:14px;align-items:center">
+    <div><h1 style="font-size:22px">Leads & Revenue</h1><div class="muted">Aaj ka kaam — ek row, ek action</div></div>
+    <div class="spacer"></div><span class="pill" id="counts"></span>
+  </div>
+
+  <div class="money" id="money" style="margin-bottom:16px"></div>
+
+  <div class="row" style="align-items:start">
+    <div style="flex:2;min-width:340px">
+      <div class="card" style="overflow:hidden">
+        <div class="grp pad" style="padding-bottom:0">
+          <h3>🔴 Enquiry — reply chahiye</h3>
+          <div id="urgent"></div>
+        </div>
+        <div class="grp pad" style="padding-bottom:0">
+          <h3>🟠 Follow-up due</h3>
+          <div id="followup"></div>
+        </div>
+        <div class="grp pad" style="padding-bottom:0">
+          <h3>🟡 Quote / slot offer</h3>
+          <div id="offered"></div>
+        </div>
+        <div class="grp pad">
+          <h3>🟢 Booked</h3>
+          <div id="today"></div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:300px">
+      <div class="card pad">
+        <div class="tiny">Mahine ki report (auto-sent on WhatsApp)</div>
+        <div class="report" style="margin-top:10px" id="report"></div>
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="sendReport()">📤 Report WhatsApp pe bhejein</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('leads');
+const row = (l, dot, action) => `<div class="li">
+  <span class="dot ${dot}"></span>
+  <div style="flex:1;min-width:0">
+    <b style="display:block">${l.name||l.phone}</b>
+    <span class="muted" style="font-size:12.5px">"${l.first_message||''}" · ₹${l.est_value||0} · ${l.sinceInbound<60?l.sinceInbound+' min':Math.round(l.sinceInbound/60)+' h'} pehle</span>
+  </div>
+  <span class="pill">${l.stage}</span>
+  <button class="btn btn-sm btn-ghost" onclick="fu('${l.id}')">${action}</button>
+</div>`;
+async function load(){
+  const d = await api('/leads');
+  const r = (await api('/revenue'));
+  const R = r.revenue;
+  document.getElementById('counts').textContent = `${R.counts.leads} leads · ${R.counts.open} open · ${R.counts.noShow} no-show`;
+  document.getElementById('money').innerHTML = `
+    <div class="stat"><span>Pipeline (potential)</span><b class="num">₹${R.pipeline}</b></div>
+    <div class="stat"><span>Booked</span><b class="num">₹${R.booked}</b></div>
+    <div class="stat"><span>Collected</span><b class="num">₹${R.collected}</b></div>
+    <div class="stat"><span>Baari ne recover kiya</span><b class="num">₹${R.recovered}</b></div>
+    <div class="stat"><span>Leakage (ignored)</span><b class="num" style="color:var(--red)">₹${R.leakage}</b></div>`;
+  document.getElementById('urgent').innerHTML = d.urgent.length? d.urgent.map(l=>row(l,'d-red','Reply')).join('') : '<div class="muted" style="padding:10px 0">Sab reply ho gaya ✓</div>';
+  document.getElementById('followup').innerHTML = d.followup.length? d.followup.map(l=>row(l,'d-amber','WA bhejein')).join('') : '<div class="muted" style="padding:10px 0">Kuch due nahi</div>';
+  document.getElementById('offered').innerHTML = d.offered.length? d.offered.map(l=>row(l,'d-amber','Confirm')).join('') : '<div class="muted" style="padding:10px 0">—</div>';
+  document.getElementById('today').innerHTML = d.today.length? d.today.map(l=>row(l,'d-teal','Line')).join('') : '<div class="muted" style="padding:10px 0">—</div>';
+  const rep = r.report;
+  document.getElementById('report').innerHTML = `
+    <div style="font-weight:800;margin-bottom:8px">📊 ${rep.org} — ${rep.month}</div>
+    <div class="l"><span>Enquiry aayi</span><b>${rep.enquiry}</b></div>
+    <div class="l"><span>Booking hui</span><b>${rep.booked}</b></div>
+    <div class="l"><span>Revenue</span><b>₹${rep.revenue}</b></div>
+    <div class="l"><span>Baari ne recover kiya</span><b>₹${rep.recovered}</b></div>
+    <div class="l"><span>Bina reply chhooti</span><b>${rep.unreplied}</b></div>
+    <div class="l"><span>Google reviews</span><b>${rep.reviews} (${rep.avgRating}★)</b></div>
+    <div class="l" style="border:0"><span>Average wait</span><b>${rep.avgWait} min</b></div>`;
+}
+async function fu(id){ const r=await api('/leads/'+id+'/followup',{method:'POST',body:{}}); toast(r.ok?'✅ Follow-up bheja (caps ke andar)':'Held: '+r.held); load(); }
+async function sendReport(){ const r=await fetch('/api/'+SLUG+'/revenue').then(x=>x.json()); const rep=r.report;
+  await api('/bot',{method:'POST',body:{phone:'919999900001',text:'report'}}).catch(()=>{});
+  toast('📤 Report WhatsApp pe chali gayi'); }
+load(); setInterval(load,8000);
+</script></body></html>

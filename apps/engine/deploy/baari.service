@@ -1,0 +1,17 @@
+[Unit]
+Description=Baari front office
+After=network.target
+
+[Service]
+Type=simple
+User=baari
+WorkingDirectory=/opt/baari
+EnvironmentFile=/opt/baari/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

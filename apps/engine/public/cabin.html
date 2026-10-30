@@ -1,0 +1,52 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Cabin</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .bigcard{background:linear-gradient(135deg,#0B7A6B,#0E8E7C);color:#fff;border-radius:22px;padding:26px}
+  .bigcard .tk{font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .bigbtn{height:96px;font-size:20px;border-radius:20px;width:100%}
+  .nextrow{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);align-items:center}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap" style="max-width:560px">
+  <div id="pvsel" class="row" style="margin-bottom:12px"></div>
+  <div class="card" style="overflow:hidden">
+    <div class="bigcard" id="nowbox">
+      <div class="tiny" style="color:rgba(255,255,255,.8)">Now serving</div>
+      <div class="tk" id="tk">—</div>
+      <div id="who" style="font-size:19px;font-weight:700;margin-top:6px">Koi patient nahi</div>
+      <div id="meta" style="opacity:.85;font-size:13.5px"></div>
+    </div>
+    <div style="padding:18px">
+      <button class="btn btn-amber bigbtn" onclick="done()">✅ Done → Next</button>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-ghost" style="flex:1" onclick="callnext()">📢 Call next</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="hold()">⏸ Hold 5 min</button>
+      </div>
+    </div>
+    <div style="padding:0 18px 18px">
+      <div class="tiny" style="margin-bottom:6px">Agla line me</div>
+      <div id="next"></div>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:14px">Doctor ko sirf ek button dabana hai — "Done". Baaki Baari khud karti hai.</p>
+</div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('cabin');
+let S=null, sel=null;
+async function load(){
+  S = await api('/state');
+  if(!sel) sel = S.providers[0].id;
+  document.getElementById('pvsel').innerHTML = S.providers.map(p=>`<button class="btn btn-sm ${p.id===sel?'btn-primary':'btn-ghost'}" onclick="sel='${p.id}';load()">${p.name.split(' ').slice(-1)[0]}</button>`).join('');
+  const p = S.providers.find(x=>x.id===sel);
+  document.getElementById('tk').textContent = p.current?p.current.label:'—';
+  document.getElementById('who').textContent = p.current?p.current.name:'Koi patient nahi';
+  document.getElementById('meta').textContent = p.current?`${p.room} · ${p.current.state==='CALLED'?'called':'in consultation'}`:'';
+  document.getElementById('next').innerHTML = p.waiting.length? p.waiting.map(t=>`<div class="nextrow"><b class="num" style="color:var(--teal-d);min-width:52px">${t.label}</b><div style="flex:1">${t.name||'Walk-in'}<div class="muted" style="font-size:12px">${t.reason||''}</div></div><span class="pill">${t.ahead===0?'abhi':'~'+t12(t.eta)}</span></div>`).join('') : '<div class="muted" style="padding:10px 0">Line khali hai</div>';
+}
+async function callnext(){ await api('/call/'+sel,{method:'POST'}); toast('📢 Bulaya gaya'); load(); }
+async function done(){ const p=S.providers.find(x=>x.id===sel); if(!p.current) return toast('Koi patient nahi'); const r=await api('/token/'+p.current.id+'/done',{method:'POST'}); toast(r.learned?`✅ Done · asli ${r.learned.actual} min (learning ${r.learned.ewma} min)`:'✅ Done'); load(); }
+async function hold(){ const p=S.providers.find(x=>x.id===sel); if(!p.current) return; await api('/token/'+p.current.id+'/hold',{method:'POST',body:{minutes:5}}); toast('⏸ 5 min hold'); load(); }
+load(); setInterval(load,5000);
+</script></body></html>

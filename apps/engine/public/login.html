@@ -1,0 +1,49 @@
+<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Login</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .auth{max-width:420px;margin:6vh auto}
+  .gbtn{display:flex;align-items:center;gap:10px;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px;font-weight:700;cursor:pointer;width:100%;font-size:15px}
+  .gbtn:hover{border-color:var(--teal);background:var(--mint)}
+  .pin{display:flex;gap:8px;justify-content:center;margin:14px 0}
+  .pin input{width:54px;height:60px;text-align:center;font-size:24px;font-weight:800;border-radius:12px}
+</style></head><body>
+<div class="topbar"><div class="wrap"><div class="brand"><span class="dot">#</span> baari</div><div class="spacer"></div>
+<span class="mode-chip">Login</span></div></div>
+<div class="wrap"><div class="auth">
+  <div class="card pad">
+    <h1 style="font-size:23px">Wapas swagat 🙏</h1>
+    <p class="muted" style="margin:6px 0 18px">Clinic, lab ya salon — apna dashboard kholen.</p>
+    <a class="gbtn" href="/auth/google"><span style="font-weight:800;color:#4285F4">G</span> Continue with Google</a>
+    <div class="hr"></div>
+    <div class="tiny">Reception / staff (desk PIN)</div>
+    <div class="row" style="margin-top:8px"><input id="slug" placeholder="clinic slug (jaise dr-sharma)" style="flex:1"></div>
+    <div class="pin">
+      <input id="p1" maxlength="1" inputmode="numeric"><input id="p2" maxlength="1" inputmode="numeric">
+      <input id="p3" maxlength="1" inputmode="numeric"><input id="p4" maxlength="1" inputmode="numeric">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="deskLogin()">Desk kholen</button>
+    <div id="msg" class="muted" style="margin-top:10px;font-size:13px"></div>
+    <div class="hr"></div>
+    <div class="tiny">Demo (iss build me)</div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="demo('dr-sharma')">🩺 Dr Sharma</button>
+      <button class="btn btn-ghost btn-sm" onclick="demo('nova-lab')">🧪 Nova Lab</button>
+      <button class="btn btn-ghost btn-sm" onclick="demo('glam')">✂️ Glam Studio</button>
+    </div>
+  </div>
+  <p class="muted" style="text-align:center;margin-top:14px;font-size:12.5px">Baari aapke patient data ko kabhi ads ke liye use nahi karti. DPDP Act 2023 compliant.</p>
+</div></div>
+<script>
+['p1','p2','p3','p4'].forEach((id,i,arr)=>{ const el=document.getElementById(id); el.addEventListener('input',()=>{ if(el.value && arr[i+1]) document.getElementById(arr[i+1]).focus(); }); });
+async function deskLogin(){
+  const slug=document.getElementById('slug').value.trim();
+  const pin=['p1','p2','p3','p4'].map(i=>document.getElementById(i).value).join('');
+  const r=await fetch('/api/auth/desk-pin',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug,pin})}).then(x=>x.json());
+  if(r.ok||r.token){ location.href='/desk?t='+slug; } else { document.getElementById('msg').textContent = r.error || 'Login fail'; }
+}
+async function demo(slug){
+  const r=await fetch('/api/auth/dev-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug})}).then(x=>x.json());
+  if(r.token){ document.cookie='baari_token='+r.token+'; path=/'; location.href='/desk?t='+slug; }
+  else document.getElementById('msg').textContent = r.error || 'demo login band hai (AUTH_REQUIRED=true)';
+}
+</script></body></html>

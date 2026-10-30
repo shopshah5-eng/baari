@@ -1,0 +1,75 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Setup</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .phone{max-width:480px;margin:0 auto;background:#0B141A;border-radius:26px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+  .chat{background:#0B141A;height:430px;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:18px 18px}
+  .b{max-width:84%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap}
+  .in{align-self:flex-end;background:#D9FDD3;color:#0B141A;border-bottom-right-radius:4px}
+  .out{align-self:flex-start;background:#1F2C33;color:#E9EDEF;border-bottom-left-radius:4px}
+  .opts{display:flex;gap:8px;flex-wrap:wrap;padding:8px}
+  .opts button{background:#1F2C33;color:#A9D8CE;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .send{display:flex;gap:8px;padding:8px}.send input{background:#1F2C33;border:0;color:#fff;border-radius:20px;padding:11px 14px}
+  .send button{width:44px;height:44px;border-radius:50%;background:var(--wa);border:0;color:#fff;font-size:18px;cursor:pointer}
+  .prog{height:4px;background:rgba(255,255,255,.12);border-radius:4px;margin:6px 8px}.prog div{height:100%;background:var(--amber);border-radius:4px;transition:.3s;width:0}
+</style></head><body>
+<div class="topbar"><div class="wrap"><div class="brand"><span class="dot">#</span> baari</div>
+<span class="mode-chip">Setup</span><div class="spacer"></div>
+<div class="nav"><a href="/" class="">Home</a><a href="/desk" class="">Desk</a></div></div></div>
+
+<div class="wrap">
+  <div style="max-width:480px;margin:0 auto 10px">
+    <h2 style="font-size:20px">10 minute me live</h2>
+    <p class="muted" style="margin:4px 0 0">Koi form nahi. Baari khud sawaal poochhti hai — 12 sawaal, ek-ek karke. Jawab na ho to default lag jaata hai.</p>
+  </div>
+  <div class="phone">
+    <div class="prog"><div id="bar"></div></div>
+    <div class="chat" id="chat"></div>
+    <div class="opts" id="opts"></div>
+    <div class="send"><input id="msg" placeholder="Jawab likhein…" onkeydown="if(event.key==='Enter')send()"><button onclick="send()">➤</button></div>
+  </div>
+  <div class="card pad" style="max-width:480px;margin:14px auto">
+    <div class="tiny">Result</div>
+    <div id="result" class="muted" style="margin-top:6px">12 sawaal poore hone par aapka tenant live ho jayega — QR standee, booking link aur desk, sab ready.</div>
+  </div>
+</div>
+<script>
+let Q=[], i=0, slug=null, answers={};
+const chat = document.getElementById('chat');
+const bubble=(t,c)=>{const d=document.createElement('div');d.className='b '+c;d.textContent=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;};
+async function boot(){
+  Q = await fetch('/api/setup/questions').then(r=>r.json());
+  bubble('Namaste 🙏 Main Baari hoon. 10 minute me aapka system chalu kar dungi. Sirf 12 sawaal poochhungi — ek-ek karke.','out');
+  // need org first
+  slug = 'new-' + Math.random().toString(36).slice(2,7);
+  await fetch('/api/setup/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug, name:'New Clinic', mode:'clinic'})});
+  next();
+}
+function next(){
+  document.getElementById('opts').innerHTML='';
+  document.getElementById('bar').style.width = Math.round(i/Q.length*100)+'%';
+  if(i>=Q.length){ finish(); return; }
+  const q=Q[i];
+  bubble(q.q,'out');
+  if(q.type==='choice'){
+    document.getElementById('opts').innerHTML = q.opts.map(([v,l])=>`<button onclick="pick('${v}','${l}')">${l}</button>`).join('');
+  }
+}
+async function submit(val, label){
+  bubble(label||val,'in');
+  await fetch('/api/setup/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug,k:Q[i].k,value:val})});
+  answers[Q[i].k]=val; i++; next();
+}
+function pick(v,l){ submit(v,l); }
+function send(){ const el=document.getElementById('msg'); const v=el.value.trim(); if(!v)return; el.value=''; submit(v); }
+async function finish(){
+  document.getElementById('bar').style.width='100%';
+  bubble('✅ Sab set! Aapka system live hai. Ye check karein 👇','out');
+  const r = document.getElementById('result');
+  r.innerHTML = `<b>Tenant live:</b> <span class="pill live">${slug}</span>
+    <div style="margin-top:8px"><a class="btn btn-primary btn-sm" href="/desk?t=${slug}">Reception desk kholen</a>
+    <a class="btn btn-ghost btn-sm" href="/bot?t=${slug}">WhatsApp test karein</a></div>
+    <p class="muted" style="margin-top:10px;font-size:13px">Jo sawaal chhoote, unke liye mode ka default lag gaya — kuch bhi go-live nahi rokta.</p>`;
+}
+boot();
+</script></body></html>

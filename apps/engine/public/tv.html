@@ -1,0 +1,104 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Waiting Room TV</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  html,body{height:100%;overflow:hidden;background:#08211D;color:#fff}
+  .tv{height:100vh;display:flex;flex-direction:column;padding:2.2vh 2.6vw;gap:2vh}
+  .tv-head{display:flex;align-items:center;gap:2vw;font-size:1.6vh}
+  .tv-head b{font-size:3vh;letter-spacing:-.02em}
+  .grid{flex:1;display:grid;gap:2vh;grid-template-columns:2.1fr 1fr;min-height:0}
+  .nowbox{background:linear-gradient(140deg,#0B7A6B,#0E9C86);border-radius:2.4vh;padding:3vh 3vw;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden}
+  .nowbox:before{content:'';position:absolute;inset:auto -10% -30% auto;width:60vh;height:60vh;background:rgba(255,255,255,.06);border-radius:50%}
+  .lbl{font-size:2.1vh;font-weight:800;letter-spacing:.28em;text-transform:uppercase;opacity:.9}
+  .big{font-size:19vh;font-weight:800;line-height:.92;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+  .sub{font-size:3.6vh;font-weight:700;opacity:.97}
+  .hint{font-size:2.2vh;opacity:.85;margin-top:1vh}
+  .nextbox{display:flex;flex-direction:column;gap:1.4vh;min-height:0}
+  .nextbox h3{font-size:2vh;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
+  .chip{background:rgba(255,255,255,.08);border-radius:1.6vh;padding:1.6vh 1.8vh;display:flex;align-items:center;gap:1.2vw}
+  .chip .n{font-size:4.4vh;font-weight:800;font-variant-numeric:tabular-nums;color:var(--amber);line-height:1}
+  .chip .m{font-size:2vh;opacity:.9;font-weight:600}
+  .pvrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.4vh}
+  .mini{background:rgba(255,255,255,.06);border-radius:1.4vh;padding:1.4vh 1.6vh}
+  .mini .n{font-size:5vh;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .mini .m{font-size:1.8vh;opacity:.8;margin-top:.4vh}
+  .foot{display:flex;align-items:center;gap:2vw;font-size:2vh;opacity:.75;border-top:1px solid rgba(255,255,255,.12);padding-top:1.4vh}
+  .pulse{animation:pulse 1.2s ease-in-out 3}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+</style></head><body>
+<div class="tv">
+  <div class="tv-head"><b id="clinic">Dr Sharma Dental</b><span id="area" style="opacity:.7"></span>
+    <div class="spacer" style="flex:1"></div>
+    <span class="pill" style="background:rgba(255,255,255,.12);color:#fff">🔊 हिंदी · ਪੰਜਾਬੀ · English</span>
+    <span id="clock" style="font-variant-numeric:tabular-nums;font-weight:700"></span></div>
+
+  <div class="grid">
+    <div class="nowbox" id="now">
+      <div class="lbl">Now serving · अब चल रहा</div>
+      <div class="big" id="bigtok">—</div>
+      <div class="sub" id="bigwho">Kripya apna token dekhein</div>
+      <div class="hint" id="bighint"></div>
+    </div>
+    <div class="nextbox">
+      <h3>Next · आगे</h3>
+      <div id="mini" class="pvrow"></div>
+    </div>
+  </div>
+  <div class="foot"><span id="ticktext">Token number ke hisaab se aayein 🙏</span></div>
+</div>
+<script src="/assets/api.js"></script>
+<script>
+let lastAnnounced = {}, S=null;
+const ORD = n => n<=500 ? n : null;
+function speak(text, lang='hi-IN'){
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang; u.rate = .85; u.pitch = 1;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+async function load(pushed){
+  if(pushed){ render(pushed); return; }
+  S = await api('/state');
+  render(S);
+}
+function render(S){
+  document.getElementById('clinic').textContent = S.org.name;
+  document.getElementById('area').textContent = S.org.area || '';
+  const serving = S.providers.filter(p=>p.current);
+  const first = serving[0];
+  if(first){
+    document.getElementById('bigtok').textContent = first.current.label;
+    document.getElementById('bigwho').textContent = `${first.name} · ${first.room||''}`;
+    document.getElementById('bighint').textContent = 'Kripya apna token le kar cabin ke paas aayein';
+  } else {
+    document.getElementById('bigtok').textContent = '—';
+    document.getElementById('bigwho').textContent = 'Koi patient nahi — thoda intezaar karein';
+    document.getElementById('bighint').textContent = '';
+  }
+  document.getElementById('mini').innerHTML = S.providers.map(p=>`
+    <div class="mini">
+      <div class="n" style="color:${p.current?'var(--amber)':'rgba(255,255,255,.35)'}">${p.current?p.current.label:'—'}</div>
+      <div class="m">${p.name}</div>
+      <div class="m" style="opacity:.55">${p.room||''} · ${p.waiting.length} waiting</div>
+    </div>`).join('');
+  // announce once per called token
+  for(const p of serving){
+    const k = p.current.id;
+    if(!lastAnnounced[k]){
+      lastAnnounced[k]=1;
+      const num = p.current.label.split('-')[1].replace(/^0/,'');
+      const room = (p.room||'cabin').replace('Cabin','कैबिन');
+      speak(`टोकन नंबर ${num}, कृपया ${room} में आइए`, 'hi-IN');
+      setTimeout(()=>speak(`Token number ${num}, please come to ${p.room||'cabin'}`, 'en-IN'), 5200);
+      document.getElementById('bigtok').classList.add('pulse');
+      setTimeout(()=>document.getElementById('bigtok').classList.remove('pulse'), 4000);
+    }
+  }
+  document.getElementById('ticktext').textContent = `${S.today.done} patients aaj dekh liye · ${S.today.waiting} waiting`;
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+load(); setInterval(()=>load(), 15000);
+try{ const es=new EventSource('/api/'+SLUG+'/stream'); es.addEventListener('state', e=>load(JSON.parse(e.data))); es.onerror=()=>es.close(); }catch(e){}
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true})},10000);
+</script></body></html>

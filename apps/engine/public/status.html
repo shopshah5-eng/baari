@@ -1,0 +1,36 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Aapka token</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .tcard{max-width:440px;margin:0 auto;background:linear-gradient(140deg,#0B7A6B,#0E9E87);color:#fff;border-radius:24px;padding:26px;text-align:center}
+  .tcard .n{font-size:64px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .tcard .s{opacity:.92;font-size:15px}
+  .kv{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.18);font-size:15px}
+  .kv:last-child{border:0}
+</style></head><body>
+<div class="topbar"><div class="wrap"><div class="brand"><span class="dot">#</span> baari</div>
+<div class="spacer"></div><span class="mode-chip">Aapka token</span></div></div>
+<div class="wrap">
+  <div class="tcard" id="card"><div class="s">Token dhoondh rahe hain…</div></div>
+  <p class="muted" style="text-align:center;max-width:420px;margin:14px auto">Yeh page WhatsApp message me bheja jaata hai. Koi app download nahi, koi login nahi.</p>
+</div>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+async function load(){
+  if(!id){ document.getElementById('card').innerHTML='<div class="s">Token ID nahi mila. WhatsApp se link kholen.</div>'; return; }
+  const r = await fetch('/api/status/'+id);
+  if(!r.ok){ document.getElementById('card').innerHTML='<div class="s">Token nahi mila</div>'; return; }
+  const t = await r.json();
+  const st = t.state==='CALLED' ? 'Aapki baari aa gayi — cabin me aayein!' : t.state==='DONE' ? 'Dhanyavaad — visit complete' : 'Waiting';
+  document.getElementById('card').innerHTML = `
+    <div class="s">${t.org} · ${t.area||''}</div>
+    <div class="n" style="margin:10px 0">${t.label}</div>
+    <div class="s" style="margin-bottom:16px">${st}</div>
+    <div class="kv"><span>${t.provider}${t.room?' · '+t.room:''}</span><b>${t.state}</b></div>
+    <div class="kv"><span>Aapse pehle</span><b>${t.ahead}</b></div>
+    <div class="kv"><span>Anumaanit samay</span><b>${t.label_time||''}</b></div>
+    <div class="kv"><span>Ghar se niklein</span><b>${t.leaveBy?new Date(t.leaveBy).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):'—'}</b></div>
+    <div style="margin-top:16px"><a class="btn btn-amber btn-sm" href="tel:${t.phone}">📞 Clinic ko call</a></div>`;
+}
+load(); if(id) setInterval(load, 5000);
+</script></body></html>

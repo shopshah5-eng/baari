@@ -1,0 +1,33 @@
+BAARI — start here
+==================
+
+1) Unzip, then:
+     npm install
+     npm start
+   Open http://localhost:3000 — it is a working platform, not a mockup.
+   (No API keys needed. Data seeds itself on first boot.)
+
+2) 90-second tour, in this order:
+     /bot     type: "Dr. Sharma ko aaj shaam dikhana hai, daant me dard hai"
+     /desk    tap Call Next, then +15 min
+     /tv      watch the token change and hear the Hindi announcement
+     /leads   pipeline / collected / recovered / leakage
+     /lab     generate a report PDF
+     /billing pay by UPI QR, open the GST invoice
+
+3) Verify before you change anything:
+     npm test          # 26 tests — queue, ETA, auth, billing, lab, DPDP
+     npm run test:sql  # 8 tests — production Postgres schema
+
+4) Read next:
+     README.md              what exists + how it is wired
+     PLATFORM-EXPLAINED.md  the idea and how it works, end to end
+     AGENTS.md              the build queue for Antigravity (M1..M6)
+     DEPLOY.md              Docker / PM2 / Supabase + production checklist
+
+5) Before taking real money:
+     cp .env.example .env  → set PUBLIC_URL, JWT_SECRET, AUTH_REQUIRED=true,
+     ADMIN_KEY, UPI_VPA. Then scan a real WhatsApp number from /desk.
+
+Docs 01–10 in docs/ are the strategy pack: brand, UX, pricing, sales playbook,
+bot spec, build plan, scheduling engine, review policy.

@@ -1,0 +1,150 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — WhatsApp Simulator</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .layout{display:grid;grid-template-columns:420px 1fr;gap:18px;align-items:start}
+  .phone{background:#0B141A;border-radius:26px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.25);position:sticky;top:76px}
+  .wa-head{display:flex;align-items:center;gap:10px;padding:10px 12px;color:#fff}
+  .wa-head .av{width:38px;height:38px;border-radius:50%;background:var(--teal);display:grid;place-items:center;font-weight:800}
+  .chat{background:#0B141A;height:470px;overflow:auto;padding:6px 8px;display:flex;flex-direction:column;gap:6px;
+    background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:18px 18px}
+  .b{max-width:82%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+  .in{align-self:flex-end;background:#D9FDD3;color:#0B141A;border-bottom-right-radius:4px}
+  .out{align-self:flex-start;background:#1F2C33;color:#E9EDEF;border-bottom-left-radius:4px}
+  .btns{display:flex;gap:6px;flex-wrap:wrap;padding:0 8px 8px}
+  .btns button{background:#1F2C33;color:#A9D8CE;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+  .send{display:flex;gap:8px;padding:8px}
+  .send input{background:#1F2C33;border:0;color:#fff;border-radius:20px;padding:11px 14px}
+  .send button{width:44px;height:44px;border-radius:50%;background:var(--wa);border:0;color:#fff;font-size:18px;cursor:pointer}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chips button{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--teal-d)}
+  .chips button:hover{background:var(--mint)}
+  .log{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0F1E1B;color:#B7E4D9;border-radius:12px;padding:12px;max-height:210px;overflow:auto;white-space:pre-wrap}
+  .stagebox{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.phone{position:static}}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="layout">
+    <div>
+      <div class="phone">
+        <div class="wa-head"><div class="av">बा</div>
+          <div><div style="font-weight:700" id="waName">Dr Sharma Dental</div>
+          <div style="font-size:11.5px;opacity:.6">online · bot + staff</div></div></div>
+        <div class="chat" id="chat"></div>
+        <div class="btns" id="quickbtns"></div>
+        <div class="send">
+          <input id="msg" placeholder="Message likhein… (ya voice note)" onkeydown="if(event.key==='Enter')send()">
+          <button onclick="send()">➤</button>
+        </div>
+      </div>
+      <div class="chips">
+        <button onclick="tryNow('Dr. Sharma ko aaj shaam dikhana hai, daant me dard hai')">🗣️ Booking (voice-note jaisa)</button>
+        <button onclick="tryNow('mera number kab aayega?')">❓ Mera number kab</button>
+        <button onclick="tryNow('scaling ka kitna hai?')">💰 Price</button>
+        <button onclick="tryNow('aaj khula hai? timing kya hai')">🕐 Timing</button>
+        <button onclick="sendPhoto()">📸 Prescription photo</button>
+        <button onclick="sendLocation()">📍 Location pin</button>
+        <button onclick="advance()">⏩ Alerts trigger karein</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card pad">
+        <div class="row" style="align-items:center">
+          <div><h2 style="font-size:18px">Yeh kya hua — live</h2>
+          <div class="muted">Har message ke peeche ka engine state</div></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm" onclick="hardReset()">↺ Naya patient</button>
+        </div>
+        <div class="hr"></div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+          <div class="stat"><span>Lead stage</span><b id="s-stage" style="font-size:18px">—</b></div>
+          <div class="stat"><span>Est. value</span><b id="s-value">₹0</b></div>
+          <div class="stat"><span>Token</span><b id="s-token" style="font-size:18px">—</b></div>
+          <div class="stat"><span>Aapse pehle</span><b id="s-ahead">—</b></div>
+          <div class="stat"><span>Anumaanit</span><b id="s-eta" style="font-size:18px">—</b></div>
+        </div>
+        <div class="stagebox" id="stages"></div>
+        <div class="hr"></div>
+        <div class="tiny">Engine log</div>
+        <div class="log" id="log">waiting…</div>
+      </div>
+      <div class="card pad" style="margin-top:14px">
+        <div class="tiny">Local ke saath test karein</div>
+        <p class="muted" style="margin:8px 0 0">Yeh simulator asli WhatsApp lane (Baileys) ka adapter hai. Lane badalne ke liye <code>org.wa.lane</code> set karein — bot ka code same rehta hai. Gemini key na ho to deterministic mock chalta hai.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('bot');
+const PHONE = new URLSearchParams(location.search).get('phone') || '919810000099';
+let seen = null, S = null;
+document.getElementById('waName').textContent = 'Dr Sharma Dental';
+
+async function poll(){
+  const msgs = await api('/inbox?phone='+PHONE+(seen?'&since='+seen:''));
+  if(msgs.length){
+    for(const m of msgs){
+      addBubble(m.text, m.direction==='in'?'in':'out');
+      if(m.buttons && m.buttons.length) showQuickButtons(m.buttons);
+    }
+    seen = msgs[msgs.length-1].id;
+  }
+  S = await api('/state');
+  const lead = (await api('/leads')).all.find(l=>l.phone===PHONE);
+  const tk = lead ? null : null;
+  if(lead){
+    document.getElementById('s-stage').textContent = lead.stage;
+    document.getElementById('s-value').textContent = '₹'+(lead.est_value||0);
+    document.getElementById('stages').innerHTML = ['enquiry','quoted','booked','visited']
+      .map(s=>`<span class="pill ${lead.stage===s?'live':''}">${s}</span>`).join('');
+  }
+  // find this patient's latest token from state
+  let mine=null, prov=null;
+  for(const p of S.providers){ for(const w of p.waiting){ if(w.phone===PHONE) {mine=w; prov=p;} } if(p.current && p.current.name && mine===null){} }
+  if(mine){
+    document.getElementById('s-token').innerHTML = `<a href="/status?id=${mine.id}" target="_blank" style="color:var(--teal)">${mine.label} ↗</a>`;
+    document.getElementById('s-ahead').textContent = mine.ahead;
+    document.getElementById('s-eta').textContent = mine.ahead===0?'abhi':'~'+t12(mine.eta);
+  }
+  const ev = await fetch('/api/'+SLUG+'/state').then(r=>r.json());
+  document.getElementById('log').textContent =
+    `tokens today : ${S.today.total}\nwaiting      : ${S.today.waiting}\ndone         : ${S.today.done}\n` +
+    S.providers.map(p=>`${p.code} ${p.name.padEnd(20)} q=${p.waiting.length} cur=${p.current?p.current.label:'-'}`).join('\n') +
+    `\n\nrevenue      : ₹${S.revenue.collected} collected · ₹${S.revenue.pipeline} pipeline`;
+}
+function addBubble(text, cls){
+  const d = document.createElement('div'); d.className='b '+cls; d.textContent=text;
+  const c = document.getElementById('chat'); c.appendChild(d); c.scrollTop = c.scrollHeight;
+}
+function showQuickButtons(arr){
+  document.getElementById('quickbtns').innerHTML = arr.map(x=>`<button onclick="tryNow('${x}')">${x}</button>`).join('');
+}
+async function send(){
+  const el = document.getElementById('msg'); const text = el.value.trim(); if(!text) return;
+  el.value=''; document.getElementById('quickbtns').innerHTML='';
+  await api('/bot',{method:'POST',body:{phone:PHONE,text}});
+  poll();
+}
+function tryNow(t){ document.getElementById('msg').value=t; send(); }
+async function sendPhoto(){
+  addBubble('📸 [photo of handwritten prescription]','in');
+  await api('/bot',{method:'POST',body:{phone:PHONE,text:'prescription photo',type:'image'}});
+  poll();
+}
+async function sendLocation(){
+  addBubble('📍 [location pin]','in');
+  await api('/bot',{method:'POST',body:{phone:PHONE,text:'location',type:'location',geo:{lat:30.9010,lng:75.8573}}});
+  poll();
+}
+async function advance(){
+  const r = await api('/simulate/advance',{method:'POST'});
+  toast(`⏩ 2-ahead: ${r.twoAhead} · review asks: ${r.reviews} · follow-ups: ${r.followups}`);
+  poll();
+}
+async function hardReset(){ location.reload(); }
+poll(); setInterval(poll, 2500);
+</script></body></html>

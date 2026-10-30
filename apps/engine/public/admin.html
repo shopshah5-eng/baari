@@ -1,0 +1,38 @@
+<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Operator console</title><link rel="stylesheet" href="/assets/app.css"></head><body>
+<div class="topbar"><div class="wrap"><div class="brand"><span class="dot">#</span> baari</div>
+<span class="mode-chip">Operator</span><div class="spacer"></div>
+<input id="key" placeholder="admin key (ADMIN_KEY)" style="max-width:220px" onchange="load()">
+<a class="btn btn-sm btn-ghost" href="/">Home</a></div></div>
+<div class="wrap">
+  <h1 style="font-size:22px">Operator console</h1>
+  <div class="muted">Saare tenants · MRR · churn risk · health</div>
+  <div class="kpis" id="kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px"></div>
+  <div class="card" style="margin-top:16px;overflow:auto">
+    <table id="tbl"><thead><tr><th>Tenant</th><th>Mode</th><th>Plan</th><th>WA</th><th>Tokens today</th><th>Leads</th><th>MRR</th><th>Risk</th></tr></thead><tbody></tbody></table>
+  </div>
+</div>
+<script>
+const key = () => document.getElementById('key').value || new URLSearchParams(location.search).get('key') || '';
+async function load(){
+  const h = key()?{'x-admin-key':key()}:{};
+  const t = await fetch('/api/admin/tenants',{headers:h}).then(r=>r.json());
+  const rev = await fetch('/api/admin/revenue',{headers:h}).then(r=>r.json());
+  const health = await fetch('/api/admin/health',{headers:h}).then(r=>r.json());
+  if(!Array.isArray(t)){ document.getElementById('kpis').innerHTML='<div class="pill bad">admin key chahiye (ADMIN_KEY env)</div>'; return; }
+  document.getElementById('kpis').innerHTML = `
+    <div class="stat"><span>Tenants</span><b>${rev.tenants}</b></div>
+    <div class="stat"><span>MRR</span><b>₹${rev.mrr.toLocaleString('en-IN')}</b></div>
+    <div class="stat"><span>Collected</span><b>₹${rev.collected.toLocaleString('en-IN')}</b></div>
+    <div class="stat"><span>Pending</span><b>₹${rev.pending.toLocaleString('en-IN')}</b></div>
+    <div class="stat"><span>Tokens today</span><b>${health.tokens_today}</b></div>
+    <div class="stat"><span>Gemini</span><b style="font-size:18px">${health.gemini?'live':'mock'}</b></div>`;
+  document.querySelector('#tbl tbody').innerHTML = t.map(x=>`<tr>
+    <td><b>${x.name}</b><div class="muted" style="font-size:12px">${x.slug} · ${x.area||''}</div></td>
+    <td>${x.mode}</td><td>${x.plan}</td>
+    <td><span class="pill ${x.wa==='connected'?'live':'warn'}">${x.wa||'—'} · ${x.lane||''}</span></td>
+    <td class="num">${x.tokens_today}</td><td class="num">${x.leads}</td><td class="num">₹${x.mrr}</td>
+    <td>${x.churn_risk?'<span class="pill bad">churn risk</span>':'<span class="pill live">active</span>'}</td></tr>`).join('');
+}
+load();
+</script></body></html>

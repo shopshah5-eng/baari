@@ -1,0 +1,73 @@
+<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — Lab desk</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .rx{display:flex;gap:14px;padding:14px;border-bottom:1px solid var(--line);align-items:flex-start}
+  .rx .thumb{width:64px;height:64px;border-radius:10px;background:var(--mint);display:grid;place-items:center;font-size:26px;flex:0 0 auto}
+  .conf{font-weight:800;font-size:12px}
+  .ok{color:var(--teal)} .warn{color:var(--amber-d)} .bad{color:var(--red)}
+</style></head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="row" style="align-items:center;margin-bottom:14px">
+    <div><h1 style="font-size:22px">Lab desk</h1><div class="muted">Prescription inbox → quote → home collection → report</div></div>
+    <div class="spacer"></div><span class="pill" id="counts"></span>
+  </div>
+  <div class="row" style="align-items:flex-start">
+    <div class="card" style="flex:1.4;min-width:340px;overflow:hidden">
+      <div class="pad" style="padding-bottom:6px"><div class="tiny">Prescription inbox</div></div>
+      <div id="inbox"></div>
+    </div>
+    <div style="flex:1;min-width:300px">
+      <div class="card pad">
+        <div class="tiny">Home collections</div>
+        <div id="collections" style="margin-top:8px"></div>
+      </div>
+      <div class="card pad" style="margin-top:14px">
+        <div class="tiny">Test it</div>
+        <p class="muted" style="font-size:13.5px;margin:6px 0 10px">WhatsApp simulator me 📸 Prescription photo bhejein — quote yahin aa jayegi.</p>
+        <a class="btn btn-ghost btn-sm" href="/bot?t=nova-lab">WhatsApp simulator kholen</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast"></div>
+<script src="/assets/api.js"></script>
+<script>
+document.getElementById('nav').innerHTML = nav('lab');
+async function load(){
+  const d = await api('/lab/inbox');
+  document.getElementById('counts').textContent = `${d.prescriptions.length} prescriptions · ${d.collections.filter(c=>c.status!=='reported').length} pending reports`;
+  document.getElementById('inbox').innerHTML = d.prescriptions.length ? d.prescriptions.map(r=>{
+    const conf = Math.round((r.confidence||0)*100);
+    const cls = conf>=85?'ok':conf>=60?'warn':'bad';
+    const tests = (r.vision_json?.tests||[]).map(t=>t.test).join(', ');
+    return `<div class="rx">
+      <div class="thumb">📸</div>
+      <div style="flex:1">
+        <b>${r.patient?.name || r.patient?.phone || 'Patient'}</b>
+        <div class="muted" style="font-size:12.5px">${tests || '—'} · ₹${r.quoted_total||0} · <span class="conf ${cls}">AI ${conf}%</span></div>
+        <div class="row" style="margin-top:8px">
+          <span class="pill">${r.status}</span>
+          <a class="btn btn-sm btn-ghost" href="/bot?t=${SLUG}">✏️ Quote</a>
+        </div>
+      </div></div>`;
+  }).join('') : '<div class="pad muted">Koi prescription nahi. WhatsApp pe photo bhejein.</div>';
+  document.getElementById('collections').innerHTML = d.collections.length ? d.collections.map(c=>`
+    <div style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <div class="row" style="align-items:center">
+        <b style="flex:1">${new Date(c.slot_start).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b>
+        <span class="pill ${c.status==='reported'?'live':''}">${c.status}</span>
+      </div>
+      <div class="muted" style="font-size:12.5px">${c.address_text || (c.geo_lat?('📍 '+c.geo_lat.toFixed(4)+', '+c.geo_lng.toFixed(4)):'no address')}</div>
+      <div class="row" style="margin-top:8px">
+        ${c.status!=='reported' ? `<button class="btn btn-sm btn-primary" onclick="gen('${c.id}')">📄 Report banayein + bhejein</button>` : `<a class="btn btn-sm btn-ghost" target="_blank" href="/api/${SLUG}/lab/report/${c.id}.pdf">PDF kholen</a>`}
+      </div>
+    </div>`).join('') : '<div class="muted">Abhi koi collection nahi</div>';
+}
+async function gen(id){
+  const r = await fetch('/api/'+SLUG+'/lab/report/'+id,{method:'POST'}).then(x=>x.json());
+  if(r.ok) toast(`📄 Report bheji — ${r.abnormal} values range se bahar`); else toast(r.error||'fail');
+  load();
+}
+load(); setInterval(load, 8000);
+</script></body></html>

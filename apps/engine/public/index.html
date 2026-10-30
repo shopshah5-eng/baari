@@ -1,0 +1,78 @@
+<!doctype html><html lang="hi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baari — WhatsApp Front Office</title><link rel="stylesheet" href="/assets/app.css">
+<style>
+  .hero{padding:46px 0 26px}
+  .hero h1{font-size:clamp(30px,5vw,52px);line-height:1.03;letter-spacing:-.035em}
+  .hero .hl{color:var(--teal)}
+  .quote{border-left:4px solid var(--amber);padding-left:14px;font-weight:700;font-size:18px;color:var(--ink)}
+  .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:22px}
+  .app{display:block;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);transition:.15s}
+  .app:hover{transform:translateY(-2px);border-color:var(--teal)}
+  .app b{display:block;font-size:16px;margin-bottom:3px}
+  .app span{font-size:13px;color:var(--grey)}
+  .app .ic{font-size:24px;margin-bottom:8px}
+  .steps{counter-reset:s}
+  .steps div{position:relative;padding:10px 0 10px 34px;border-bottom:1px solid var(--line);font-size:14.5px}
+  .steps div:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:10px;width:22px;height:22px;border-radius:50%;background:var(--teal);color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center}
+</style></head><body>
+<div class="topbar"><div class="wrap">
+  <div class="brand"><span class="dot">#</span> baari</div><span class="mode-chip">v0 · working build</span>
+  <div class="spacer"></div>
+  <div class="nav"><a href="/setup" class="">Setup</a><a href="/desk" class="">Desk</a><a href="/tv" class="">TV</a></div>
+</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="quote">"Meri baari kab aayegi?"</div>
+    <h1 style="margin-top:10px">Ab <span class="hl">Baari</span> bata degi.<br>WhatsApp par.</h1>
+    <p class="muted" style="max-width:620px;font-size:16px">Zero-app WhatsApp appointment, live OPD token, multi-doctor timing, lab prescription quotes, lead CRM + revenue, review engine — kuch install nahi, kuch seekhna nahi.</p>
+    <div class="row" style="margin-top:16px">
+      <a class="btn btn-primary" href="/bot">WhatsApp bot try karein →</a>
+      <a class="btn btn-ghost" href="/desk">Reception desk</a>
+      <a class="btn btn-ghost" href="/tv">Waiting-room TV</a>
+      <a class="btn btn-ghost" href="/setup">10-min setup</a>
+    </div>
+  </div>
+
+  <div class="apps">
+    <a class="app" href="/bot"><div class="ic">💬</div><b>WhatsApp simulator</b><span>Patient ki tarah message karein — booking, status, price, prescription photo, location pin</span></a>
+    <a class="app" href="/desk"><div class="ic">✅</div><b>Reception desk</b><span>4 buttons: Call Next · Add Walk-in · Emergency · +15 min</span></a>
+    <a class="app" href="/cabin"><div class="ic">👨‍⚕️</div><b>Cabin view</b><span>Doctor ka ek button — Done. ETA yahin se seekhta hai</span></a>
+    <a class="app" href="/tv"><div class="ic">📺</div><b>TV display</b><span>Now serving + Hindi announcement. Clinic ki TV pe khulta hai</span></a>
+    <a class="app" href="/leads"><div class="ic">📊</div><b>Leads & revenue</b><span>Pipeline, recovered ₹, leakage, follow-ups, monthly report</span></a>
+    <a class="app" href="/app"><div class="ic">🧠</div><b>Owner home</b><span>Learning, reviews, knowledge base, plan</span></a>
+    <a class="app" href="/setup"><div class="ic">🚀</div><b>Setup chat</b><span>12 sawaal — 10 minute me live, bina kisi insaan ke</span></a>
+    <a class="app" href="/status"><div class="ic">🎫</div><b>Patient status page</b><span>Token, position, leave-by time — link WhatsApp pe jata hai</span></a>
+  </div>
+
+  <div class="row" style="margin-top:22px;align-items:start">
+    <div class="card pad" style="flex:1;min-width:300px">
+      <h2 style="font-size:16px">90-second demo (iss order me dikhayein)</h2>
+      <div class="steps" style="margin-top:10px">
+        <div><b>WhatsApp</b> kholen → "Dr. Sharma ko aaj shaam dikhana hai, daant me dard hai" bhejein → token + samay + ghar se nikalne ka time</div>
+        <div>"mera number kab aayega?" → live position + window</div>
+        <div><b>Desk</b> pe jaakar Call Next → TV par token badalta hai aur awaaz aati hai</div>
+        <div>Desk pe <b>+15 min</b> → sab waiting patients ko WhatsApp delay message</div>
+        <div>Wapas <b>WhatsApp</b> → "⏩ Alerts trigger" → 2-ahead alert aata hai</div>
+        <div>Desk pe patient ko <b>Done</b> → learning + 1 min baad review ask</div>
+        <div><b>Leads</b> pe revenue aur leakage dekhein</div>
+      </div>
+    </div>
+    <div class="card pad" style="flex:1;min-width:280px">
+      <h2 style="font-size:16px">Teen business modes, ek product</h2>
+      <div class="muted" style="margin:6px 0 12px">Labels badalte hain, code nahi.</div>
+      <div class="row">
+        <a class="btn btn-ghost btn-sm" href="/desk?t=dr-sharma">🩺 Dr Sharma Dental</a>
+        <a class="btn btn-ghost btn-sm" href="/desk?t=nova-lab">🧪 Nova Diagnostics</a>
+        <a class="btn btn-ghost btn-sm" href="/desk?t=glam">✂️ Glam Studio</a>
+      </div>
+      <div class="hr"></div>
+      <div class="tiny">Iss build mein</div>
+      <p class="muted" style="font-size:13.5px;margin:6px 0 0">Per-provider queue engine · EWMA self-learning ETA · 2-ahead alerts · grounded knowledge base · lead CRM + revenue · follow-up ladder with anti-ban caps · policy-safe review engine · 12-question setup chat · WhatsApp-only delivery.<br><br>
+      Gemini &amp; Baileys adapters: <code>GEMINI_API_KEY</code> set karein to live, warna deterministic mock.</p>
+    </div>
+  </div>
+  <p class="muted" style="text-align:center;margin:26px 0 40px;font-size:12.5px">Baari v0 · demo build · docs: 01–10</p>
+</div>
+</body></html>
