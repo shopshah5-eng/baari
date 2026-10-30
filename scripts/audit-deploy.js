@@ -149,6 +149,8 @@ async function fetchRoute(route, opts = {}) {
 
   // ── B3. Signup Funnel & Real Account Creation (P0 §C1 & §C2) ─────────────────
   console.log('\n--- B3. Signup Funnel & Real Account Creation ---');
+  let newOrgCookie = null;
+  let newOrgId = null;
   try {
     const signupEmail = `audit_${Date.now()}@example.invalid`;
     const signupRes = await fetchRoute('/api/auth/signup', {
@@ -166,12 +168,14 @@ async function fetchRoute(route, opts = {}) {
     if (signupRes.status === 200) {
       const signupBody = JSON.parse(signupRes.text);
       if (signupBody.ok && signupBody.orgId) {
+        newOrgId = signupBody.orgId;
         pass('B3. POST /api/auth/signup creates real user + org + session', signupEmail);
       } else {
         crit('B3. POST /api/auth/signup returned 200 but missing ok/orgId');
       }
       const setCookie = signupRes.headers.get('set-cookie');
       if (setCookie && setCookie.includes('baari_session=')) {
+        newOrgCookie = setCookie.split(';')[0];
         pass('B3. POST /api/auth/signup issued valid session cookie');
       } else {
         warn('B3. POST /api/auth/signup missing session cookie header');
@@ -375,6 +379,254 @@ async function fetchRoute(route, opts = {}) {
     warn('B8. Skipped persistence test due to missing auth cookie');
   }
 
+  // ── B8a. Fresh Clinic Tenant Isolation & Zero Fake Patients (§C5) ─────────────
+  console.log('\n--- B8a. Fresh Clinic Tenant Isolation & DPDP Parity ---');
+  if (newOrgCookie) {
+    try {
+      const patRes = await fetchRoute('/engine-api/patients', {
+        headers: { Cookie: newOrgCookie }
+      });
+      if (patRes.status === 200) {
+        const patData = JSON.parse(patRes.text);
+        if (Array.isArray(patData.patients) && patData.patients.length === 0) {
+          pass('B8a. Fresh clinic starts with 0 seeded patients (§C5)');
+        } else {
+          crit('B8a. Fresh clinic has seeded patients from other orgs (§C5)', `Count: ${patData.patients?.length}`);
+        }
+      } else {
+        crit('B8a. GET /engine-api/patients failed', `Status: ${patRes.status}`);
+      }
+
+      const dpdpRes = await fetchRoute('/engine-api/dpdp/export', {
+        headers: { Cookie: newOrgCookie }
+      });
+      if (dpdpRes.status === 200) {
+        const dpdpData = JSON.parse(dpdpRes.text);
+        if (Array.isArray(dpdpData.records) && dpdpData.records.length === 0) {
+          pass('B8a. Fresh clinic DPDP export is clean and isolated (0 records §C5)');
+        } else {
+          crit('B8a. DPDP export leaked foreign clinic records (§C5)', `Count: ${dpdpData.records?.length}`);
+        }
+      } else {
+        crit('B8a. GET /engine-api/dpdp/export failed', `Status: ${dpdpRes.status}`);
+      }
+    } catch (e) {
+      crit('B8a. Fresh clinic tenant isolation check failed', e.message);
+    }
+  } else {
+    warn('B8a. Skipped fresh clinic isolation checks due to missing newOrgCookie');
+  }
+
+  // ── B8b. End-to-End Core Queue Loop: Walkin -> Call Next -> Done (§C1 & §C2) ─
+  console.log('\n--- B8b. End-to-End Core Queue Loop (Walk-in → Call Next → Cabin Done) ---');
+  if (newOrgCookie) {
+    try {
+      // 1. Add walk-in patient
+      const walkinRes = await fetchRoute('/engine-api/desk/walkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({
+          providerId: 'p1',
+          name: 'Audit Walkin Patient',
+          phone: '+91 98200 11223',
+          reason: 'Routine Checkup'
+        })
+      });
+
+      let addedToken = null;
+      if (walkinRes.status === 200) {
+        const walkinBody = JSON.parse(walkinRes.text);
+        addedToken = walkinBody.token;
+        if (addedToken && addedToken.formatted_number) {
+          pass('B8b. POST /engine-api/desk/walkin added patient (§C2)', addedToken.formatted_number);
+        } else {
+          crit('B8b. POST /engine-api/desk/walkin returned 200 but missing token');
+        }
+      } else {
+        crit('B8b. POST /engine-api/desk/walkin failed (§C2)', `Status: ${walkinRes.status}`);
+      }
+
+      // 2. Verify patient is in waiting list
+      const deskAfterWalkin = await fetchRoute('/engine-api/desk', {
+        headers: { Cookie: newOrgCookie }
+      });
+      const deskWData = JSON.parse(deskAfterWalkin.text);
+      const waitingList = deskWData.columns?.[0]?.waiting || [];
+      if (waitingList.some(w => w.id === addedToken?.id)) {
+        pass('B8b. GET /engine-api/desk shows walk-in patient in waiting list');
+      } else {
+        crit('B8b. Walk-in patient not found in desk waiting list');
+      }
+
+      // 3. Call Next patient
+      const callRes = await fetchRoute('/engine-api/desk/call-next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({
+          providerId: 'p1',
+          idempotencyKey: `call-${Date.now()}`
+        })
+      });
+
+      let calledTok = null;
+      if (callRes.status === 200) {
+        const callData = JSON.parse(callRes.text);
+        calledTok = callData.token || callData.called;
+        if (calledTok) {
+          pass('B8b. POST /engine-api/desk/call-next transitioned patient to CALLED (§C1)', calledTok.formatted_number);
+        } else {
+          crit('B8b. Call Next failed to return called token');
+        }
+      } else {
+        crit('B8b. POST /engine-api/desk/call-next failed', `Status: ${callRes.status}`);
+      }
+
+      // 4. Verify desk reflects currently called patient
+      const deskAfterCall = await fetchRoute('/engine-api/desk', {
+        headers: { Cookie: newOrgCookie }
+      });
+      const deskCData = JSON.parse(deskAfterCall.text);
+      const currentServing = deskCData.columns?.[0]?.current;
+      if (currentServing && currentServing.id === calledTok?.id) {
+        pass('B8b. GET /engine-api/desk reflects current serving patient in cabin (§C1)');
+      } else {
+        crit('B8b. GET /engine-api/desk did not reflect called patient');
+      }
+
+      // 5. Mark consultation done
+      const doneRes = await fetchRoute('/engine-api/cabin/done', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({ tokenId: calledTok?.id, providerId: 'p1' })
+      });
+      if (doneRes.status === 200) {
+        pass('B8b. POST /engine-api/cabin/done marked consultation complete (§C1)');
+      } else {
+        crit('B8b. POST /engine-api/cabin/done failed', `Status: ${doneRes.status}`);
+      }
+
+      // 6. Verify completed count incremented and current cleared
+      const deskAfterDone = await fetchRoute('/engine-api/desk', {
+        headers: { Cookie: newOrgCookie }
+      });
+      const deskDData = JSON.parse(deskAfterDone.text);
+      const col = deskDData.columns?.[0];
+      if (col && col.stats.completedCount >= 1 && col.current === null) {
+        pass('B8b. Queue state transition verified: completedCount incremented, cabin cleared (§C1)');
+      } else {
+        crit('B8b. Consultation completion state transition failed (§C1)');
+      }
+    } catch (e) {
+      crit('B8b. Core queue loop test failed', e.message);
+    }
+  }
+
+  // ── B8c. Desk Action Suite & Provider Ownership Guard (§C2 & §C4) ────────────
+  console.log('\n--- B8c. Desk Action Suite & Provider Ownership Guard ---');
+  if (newOrgCookie) {
+    try {
+      // 1. Alien provider validation: Must reject with 404/400 (§C4)
+      const alienCall = await fetchRoute('/engine-api/desk/call-next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({ providerId: 'p_nonexistent_alien_doc_999' })
+      });
+      if (alienCall.status === 404 || alienCall.status === 400) {
+        pass('B8c. Alien provider rejected with 404/400 (§C4)');
+      } else {
+        crit('B8c. Alien provider permitted without ownership check (§C4)', `Status: ${alienCall.status}`);
+      }
+
+      // 2. Add Emergency Patient
+      const emRes = await fetchRoute('/engine-api/desk/emergency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({ providerId: 'p1', name: 'Emergency Audit Patient', phone: '+91 99999 11111' })
+      });
+      if (emRes.status === 200) {
+        pass('B8c. POST /engine-api/desk/emergency succeeded (§C2)');
+      } else {
+        crit('B8c. POST /engine-api/desk/emergency failed (§C2)', `Status: ${emRes.status}`);
+      }
+
+      // 3. Set Queue Delay
+      const delayRes = await fetchRoute('/engine-api/desk/delay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({ providerId: 'p1', minutes: 15 })
+      });
+      if (delayRes.status === 200) {
+        pass('B8c. POST /engine-api/desk/delay succeeded (§C2)');
+      } else {
+        crit('B8c. POST /engine-api/desk/delay failed (§C2)', `Status: ${delayRes.status}`);
+      }
+
+      // 4. Undo Last Action
+      const undoRes = await fetchRoute('/engine-api/desk/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({ providerId: 'p1' })
+      });
+      if (undoRes.status === 200 || undoRes.status === 400) {
+        pass('B8c. POST /engine-api/desk/undo handled (§C2)');
+      } else {
+        crit('B8c. POST /engine-api/desk/undo returned 404 or down (§C2)', `Status: ${undoRes.status}`);
+      }
+
+      // 5. Add New Provider / Cabin
+      const provRes = await fetchRoute('/engine-api/desk/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({
+          name: 'Dr. Neha Gupta',
+          code: 'G',
+          room: 'Cabin 2',
+          specialty: 'Orthodontics',
+          avgMinutes: 15
+        })
+      });
+      if (provRes.status === 200) {
+        pass('B8c. POST /engine-api/desk/providers created new doctor (§C2)');
+      } else {
+        crit('B8c. POST /engine-api/desk/providers failed (§C2)', `Status: ${provRes.status}`);
+      }
+    } catch (e) {
+      crit('B8c. Desk action suite test failed', e.message);
+    }
+  }
+
+  // ── B8d. Smart Setup / Onboarding Create (§C3) ──────────────────────────────
+  console.log('\n--- B8d. Smart Setup / Onboarding Create ---');
+  if (newOrgCookie) {
+    try {
+      const onboardRes = await fetchRoute('/engine-api/onboarding/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: newOrgCookie },
+        body: JSON.stringify({
+          mode: 'clinic',
+          name: 'Audit Dental Care Clinic',
+          area: 'Civil Lines, Ludhiana',
+          providers: [
+            { name: 'Dr. Audit Kumar', specialty: 'General Dentist', avgMinutes: 10 }
+          ]
+        })
+      });
+
+      if (onboardRes.status === 200) {
+        const obData = JSON.parse(onboardRes.text);
+        if (obData.ok && obData.status === 'active') {
+          pass('B8d. POST /engine-api/onboarding/create successfully configured org (§C3)');
+        } else {
+          crit('B8d. POST /engine-api/onboarding/create returned 200 but missing ok/status');
+        }
+      } else {
+        crit('B8d. POST /engine-api/onboarding/create failed (§C3)', `Status: ${onboardRes.status}`);
+      }
+    } catch (e) {
+      crit('B8d. Onboarding create test failed', e.message);
+    }
+  }
+
   // ── B9. Login Rate Limiting (P1 §7 & §W1) ───────────────────────────────────
   console.log('\n--- B9. Login Rate Limiting (Keyed per Account) ---');
   try {
@@ -517,6 +769,30 @@ async function fetchRoute(route, opts = {}) {
     pass('B12. /tv/[token] has aria-live="polite" region for screen readers (§C5)');
   } else {
     crit('B12. /tv/[token] missing aria-live="polite" region');
+  }
+
+  // Check layout.tsx for zero Dr Sharma Dental useState default (§C6)
+  const layoutSrc = fs.readFileSync(path.join(webAppDir, '(dashboard)', 'layout.tsx'), 'utf8');
+  if (!layoutSrc.includes("useState('Dr Sharma Dental')")) {
+    pass('B12. /layout has zero hardcoded Dr Sharma Dental in useState (§C6)');
+  } else {
+    crit('B12. /layout leaks Dr Sharma Dental in SSR useState defaults (§C6)');
+  }
+
+  // Check desk/page.tsx for aria-live="polite" region (§C8)
+  const deskSrc = fs.readFileSync(path.join(webAppDir, '(dashboard)', 'desk', 'page.tsx'), 'utf8');
+  if (deskSrc.includes('aria-live="polite"')) {
+    pass('B12. /desk has aria-live="polite" region for active token announcement (§C8)');
+  } else {
+    crit('B12. /desk missing aria-live="polite" region');
+  }
+
+  // Check patients/page.tsx for honest empty state (§C5)
+  const patientsSrc = fs.readFileSync(path.join(webAppDir, '(dashboard)', 'patients', 'page.tsx'), 'utf8');
+  if (patientsSrc.includes('Abhi koi patient nahi hai — pehla walk-in add karein')) {
+    pass('B12. /patients has honest empty state copy for new clinics (§C5)');
+  } else {
+    crit('B12. /patients missing honest empty state copy');
   }
 
   // ── Final Audit Verdict ───────────────────────────────────────────────────

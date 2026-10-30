@@ -17,8 +17,8 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [tenantName, setTenantName] = useState('Dr Sharma Dental');
-  const [tenantInfo, setTenantInfo] = useState('Clinic · 3 Doctors');
+  const [tenantName, setTenantName] = useState('Clinic Workspace');
+  const [tenantInfo, setTenantInfo] = useState('Consultation & Queues');
   const [waConnected, setWaConnected] = useState(false);
   const [isQuietHours, setIsQuietHours] = useState(false);
 

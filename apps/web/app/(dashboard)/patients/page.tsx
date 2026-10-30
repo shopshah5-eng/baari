@@ -151,7 +151,7 @@ export default function PatientsPage() {
       <Card className="p-0 overflow-hidden">
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-xs text-muted">
-            {search ? 'No patients matching your search query.' : 'No registered patients in the database yet.'}
+            {search ? 'No patients matching your search query.' : 'Abhi koi patient nahi hai — pehla walk-in add karein'}
           </div>
         ) : (
           <table className="w-full text-left text-xs">

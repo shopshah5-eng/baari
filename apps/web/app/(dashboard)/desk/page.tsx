@@ -288,7 +288,7 @@ export default function DeskPage() {
               </div>
 
               {/* Active / In-Consult Patient */}
-              <div className="p-4 bg-bg-inset border-b border-border">
+              <div className="p-4 bg-bg-inset border-b border-border" aria-live="polite" aria-atomic="true">
                 <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
                   Currently in Cabin
                 </span>

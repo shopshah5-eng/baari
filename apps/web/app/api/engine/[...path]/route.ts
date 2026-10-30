@@ -6,7 +6,15 @@ import {
   markDone,
   loadState,
   saveState,
-  findDisplayToken
+  findDisplayToken,
+  addWalkIn,
+  addEmergency,
+  setDelay,
+  undoCall,
+  skipToken,
+  recallToken,
+  addProvider,
+  updateOrgOnboarding
 } from '@/lib/store-serverless';
 import { verifySession } from '@/lib/auth';
 
@@ -121,11 +129,111 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
     return NextResponse.json(deskState);
   }
 
-  // 6. Desk Call Next (Idempotent & Persistent)
+  // 6. Desk Call Next (Idempotent & Persistent §C1 & §C4)
   if (subpath === 'desk/call-next' && request.method === 'POST') {
     const body = await request.json().catch(() => ({}));
     const { providerId, idempotencyKey } = body;
     const result = callNext(orgId, providerId || 'p1', idempotencyKey);
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6a. Desk Walk-in Patient (§C2)
+  if (subpath === 'desk/walkin' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { providerId, name, patientName, phone, patientPhone, reason } = body;
+    const result = addWalkIn(
+      orgId,
+      providerId || 'p1',
+      name || patientName || 'Walk-in Patient',
+      phone || patientPhone || '',
+      reason
+    );
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6b. Desk Emergency Patient (§C2)
+  if (subpath === 'desk/emergency' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { providerId, name, patientName, phone, patientPhone } = body;
+    const result = addEmergency(
+      orgId,
+      providerId || 'p1',
+      name || patientName || 'Emergency Patient',
+      phone || patientPhone || ''
+    );
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6c. Desk Delay (§C2)
+  if (subpath === 'desk/delay' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { providerId, minutes } = body;
+    const result = setDelay(orgId, providerId || 'p1', Number(minutes) || 15);
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6d. Desk Undo Call (§C2)
+  if (subpath === 'desk/undo' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { providerId } = body;
+    const result = undoCall(orgId, providerId);
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6e. Desk Skip Token (§C2)
+  if (subpath === 'desk/skip' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { tokenId } = body;
+    if (!tokenId) {
+      return NextResponse.json({ error: 'tokenId is required' }, { status: 400 });
+    }
+    const result = skipToken(orgId, tokenId);
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6f. Desk Recall Token (§C2)
+  if (subpath === 'desk/recall' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const { tokenId } = body;
+    if (!tokenId) {
+      return NextResponse.json({ error: 'tokenId is required' }, { status: 400 });
+    }
+    const result = recallToken(orgId, tokenId);
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
+  // 6g. Desk Provider Registration (§C2 & §C4)
+  if (subpath === 'desk/providers' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const result = addProvider(orgId, body);
+    return NextResponse.json(result);
+  }
+
+  // 6h. Smart Setup / Onboarding Create (§C3)
+  if (subpath === 'onboarding/create' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const result = updateOrgOnboarding(orgId, body);
     return NextResponse.json(result);
   }
 
@@ -143,11 +251,9 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
 
   if (subpath === 'cabin/done' && request.method === 'POST') {
     const body = await request.json().catch(() => ({}));
-    const { tokenId } = body;
-    if (tokenId) {
-      markDone(orgId, tokenId);
-    }
-    return NextResponse.json({ ok: true });
+    const { tokenId, providerId } = body;
+    const result = markDone(orgId, tokenId, providerId);
+    return NextResponse.json(result);
   }
 
   // 8. Dashboard KPIs
@@ -231,11 +337,12 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
     });
   }
 
-  // 12. Patients & DPDP
+  // 12. Patients & DPDP (§C5 Tenant Isolation)
   if (subpath === 'patients') {
     const state = loadState();
+    const orgTokens = state.tokens.filter((t) => t.org_id === orgId);
     return NextResponse.json({
-      patients: state.tokens.map((t) => ({
+      patients: orgTokens.map((t) => ({
         id: t.id,
         name: t.patient_name,
         phone: t.patient_phone,
@@ -248,7 +355,8 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
 
   if (subpath === 'dpdp/export') {
     const state = loadState();
-    return new NextResponse(JSON.stringify({ exportDate: new Date().toISOString(), records: state.tokens }), {
+    const orgTokens = state.tokens.filter((t) => t.org_id === orgId);
+    return new NextResponse(JSON.stringify({ exportDate: new Date().toISOString(), records: orgTokens }), {
       headers: {
         'Content-Type': 'application/json',
         'Content-Disposition': 'attachment; filename="baari_dpdp_export.json"'

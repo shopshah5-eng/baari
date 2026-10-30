@@ -55,16 +55,10 @@ export default function OnboardingPage() {
         })
       });
 
-      // Also set the session cookie via login route
-      await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          authMode: 'password',
-          email: 'doctor@clinic.com',
-          password: 'password123'
-        })
-      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save setup configuration');
+      }
 
       router.push('/');
       router.refresh();
