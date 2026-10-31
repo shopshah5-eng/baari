@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, UserCheck, Tv, MessageSquare,
   Star, CreditCard, ChevronDown, CheckCircle2, AlertCircle, LogOut,
-  Menu, X
+  Menu, X, FileText, Settings
 } from 'lucide-react';
 import { Badge } from '@baari/ui';
 
@@ -20,6 +20,7 @@ export default function DashboardLayout({
 
   const [tenantName, setTenantName] = useState('Clinic Workspace');
   const [tenantInfo, setTenantInfo] = useState('Consultation & Queues');
+  const [userRole, setUserRole] = useState('Clinic Owner');
   const [waConnected, setWaConnected] = useState(false);
   const [isQuietHours, setIsQuietHours] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,7 +47,7 @@ export default function DashboardLayout({
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch real tenant info & WhatsApp connection state
+  // Fetch real tenant info, auth user role & WhatsApp connection state
   useEffect(() => {
     fetch('/engine-api/wa/status')
       .then(res => res.ok ? res.json() : null)
@@ -68,6 +69,18 @@ export default function DashboardLayout({
         }
       })
       .catch(() => {});
+
+    fetch('/api/auth/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        if (d && d.user) {
+          if (d.user.role === 'owner') setUserRole('Clinic Owner');
+          else if (d.user.role === 'receptionist') setUserRole('Reception Desk');
+          else if (d.user.role === 'doctor') setUserRole('Doctor');
+          else if (d.user.role === 'operator') setUserRole('Platform Operator');
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogout = async () => {
@@ -85,16 +98,18 @@ export default function DashboardLayout({
     .join('')
     .toUpperCase() || 'CW';
 
-  // Exactly 8 sidebar items per §3
+  // Navigation items including Reports and Settings
   const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/desk', label: 'Reception Desk', icon: Users, badge: 'Live' },
     { href: '/cabin', label: 'Doctor Cabin', icon: UserCheck },
     { href: '/tv/display-default', label: 'Waiting TV', icon: Tv },
     { href: '/patients', label: 'Patients', icon: Users },
+    { href: '/reports', label: 'Reports & CSV', icon: FileText },
     { href: '/whatsapp', label: 'WhatsApp', icon: MessageSquare, statusDot: waConnected },
     { href: '/reviews', label: 'Reviews', icon: Star },
-    { href: '/billing', label: 'Billing & Plans', icon: CreditCard }
+    { href: '/billing', label: 'Billing & Plans', icon: CreditCard },
+    { href: '/settings', label: 'Settings', icon: Settings }
   ];
 
   const sidebarContent = (
@@ -220,7 +235,7 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-3 md:gap-4 text-xs">
-            <span className="text-muted hidden sm:inline">Receptionist PIN Scoped</span>
+            <span className="text-muted hidden sm:inline">{userRole}</span>
             <button
               onClick={handleLogout}
               className="text-muted hover:text-dark flex items-center gap-1 text-xs"

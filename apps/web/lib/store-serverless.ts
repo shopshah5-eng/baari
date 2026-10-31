@@ -24,6 +24,7 @@ export interface ProviderRecord {
   room: string;
   specialty: string;
   avg_minutes: number;
+  delay_minutes?: number;
 }
 
 export interface UserRecord {
@@ -371,7 +372,9 @@ export function setDelay(orgId: string, providerId: string, minutes: number) {
   if (!prov) {
     return { error: 'Provider not found in organization' };
   }
-  return { ok: true, delayMinutes: minutes, providerId };
+  prov.delay_minutes = (prov.delay_minutes || 0) + minutes;
+  saveState(state);
+  return { ok: true, delayMinutes: prov.delay_minutes, providerId };
 }
 
 /**
@@ -681,7 +684,7 @@ export function getDeskState(orgId: string) {
         waitingCount: waiting.length,
         completedCount: completed.length,
         avgMinutes: prov.avg_minutes,
-        delayMinutes: 0
+        delayMinutes: prov.delay_minutes || 0
       }
     };
   });

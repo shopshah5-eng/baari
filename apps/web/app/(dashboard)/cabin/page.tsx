@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, Button, Badge } from '@baari/ui';
-import { CheckCircle2, Clock, Users, Sparkles, ChevronRight, UserX, PauseCircle, FastForward } from 'lucide-react';
+import { CheckCircle2, Clock, Users, Sparkles, ChevronRight, UserX, PauseCircle, FastForward, PhoneCall } from 'lucide-react';
 import { ErrorState } from '../components/ErrorState';
 
 interface CabinData {
@@ -99,6 +99,25 @@ export default function CabinPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tokenId: data.current.id })
+      });
+      await fetchCabin();
+    } catch {
+      await fetchCabin();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCallNext = async () => {
+    setActionLoading(true);
+    try {
+      await fetch('/engine-api/desk/call-next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: data?.provider?.id || 'p1',
+          idempotencyKey: `cabin-call-${Date.now()}`
+        })
       });
       await fetchCabin();
     } catch {
@@ -213,13 +232,25 @@ export default function CabinPage() {
             </div>
           </>
         ) : (
-          <div className="py-12 space-y-3">
+          <div className="py-12 space-y-4">
             <div className="w-12 h-12 rounded-full bg-bg-inset border border-border flex items-center justify-center mx-auto text-muted">
               <Users className="w-6 h-6" />
             </div>
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-dark">Cabin is currently open</h2>
-              <p className="text-xs text-muted">Tap Call Next on the reception desk to send the next patient in.</p>
+              <p className="text-xs text-muted">Ready to receive the next waiting patient.</p>
+            </div>
+            <div className="pt-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleCallNext}
+                disabled={actionLoading}
+                className="text-xs font-bold px-6 shadow-minimal"
+              >
+                <PhoneCall className={`w-3.5 h-3.5 mr-1.5 ${actionLoading ? 'animate-bounce' : ''}`} />
+                {actionLoading ? 'Calling...' : 'Call Next Patient'}
+              </Button>
             </div>
           </div>
         )}

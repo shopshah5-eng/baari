@@ -13,23 +13,37 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<number>(0);
   const [mode, setMode] = useState<OrgMode>('clinic');
-  const [businessName, setBusinessName] = useState('Dr Sharma Dental');
-  const [area, setArea] = useState('Model Town, Ludhiana');
+  const [businessName, setBusinessName] = useState('My Clinic');
+  const [area, setArea] = useState('City Centre');
   const [phone, setPhone] = useState('919810000001');
   const [providers, setProviders] = useState([
-    { name: 'Dr. Sharma', specialty: 'Dental Surgeon', avgMinutes: 12 },
-    { name: 'Dr. Kaur', specialty: 'Skin & Aesthetics', avgMinutes: 8 }
+    { name: 'Dr. Sharma', specialty: 'General Practice', avgMinutes: 12 },
+    { name: 'Dr. Kaur', specialty: 'Consultant', avgMinutes: 10 }
   ]);
   const [hours, setHours] = useState('10:00 AM – 2:00 PM, 5:00 PM – 8:00 PM (Sunday closed)');
   const [services, setServices] = useState([
     { name: 'Consultation', price: 300, duration: 10 },
-    { name: 'Scaling & Polishing', price: 1200, duration: 25 },
-    { name: 'Root Canal Treatment (RCT)', price: 4500, duration: 45 }
+    { name: 'Routine Procedure', price: 1200, duration: 25 },
+    { name: 'Specialist Treatment', price: 3500, duration: 45 }
   ]);
 
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/tenant')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => {
+        if (d && d.tenant) {
+          if (d.tenant.name) setBusinessName(d.tenant.name);
+          if (d.tenant.mode) setMode(d.tenant.mode as OrgMode);
+          if (d.tenant.area) setArea(d.tenant.area);
+          if (d.tenant.phone) setPhone(d.tenant.phone);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const labels = getLabels(mode);
   const totalSteps = 6;

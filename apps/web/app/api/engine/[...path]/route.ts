@@ -389,6 +389,13 @@ async function handleRequest(request: NextRequest, { params }: { params: Promise
   }
 
   if (subpath === 'dpdp/delete' && request.method === 'DELETE') {
+    const url = new URL(request.url);
+    const patientId = url.searchParams.get('patientId');
+    if (patientId) {
+      const state = loadState();
+      state.tokens = state.tokens.filter((t) => !(t.org_id === orgId && t.id === patientId));
+      saveState(state);
+    }
     return NextResponse.json({ ok: true, deleted: true });
   }
 

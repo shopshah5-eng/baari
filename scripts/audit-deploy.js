@@ -590,6 +590,17 @@ async function fetchRoute(route, opts = {}) {
       } else {
         crit('B8c. POST /engine-api/desk/providers failed (§C2)', `Status: ${provRes.status}`);
       }
+
+      // 6. DPDP Patient Hard Delete
+      const wipeRes = await fetchRoute('/engine-api/dpdp/delete?patientId=test_patient_id_wipe', {
+        method: 'DELETE',
+        headers: { Cookie: newOrgCookie }
+      });
+      if (wipeRes.status === 200) {
+        pass('B8c. DELETE /engine-api/dpdp/delete succeeded (§C2)');
+      } else {
+        crit('B8c. DELETE /engine-api/dpdp/delete failed (§C2)', `Status: ${wipeRes.status}`);
+      }
     } catch (e) {
       crit('B8c. Desk action suite test failed', e.message);
     }

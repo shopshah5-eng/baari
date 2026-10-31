@@ -67,6 +67,12 @@ export default function DeskPage() {
   const [walkinName, setWalkinName] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('+91 ');
   const [walkinReason, setWalkinReason] = useState('Consultation');
+  const [walkinProviderId, setWalkinProviderId] = useState<string>('');
+
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [emergencyName, setEmergencyName] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('+91 ');
+  const [emergencyProviderId, setEmergencyProviderId] = useState<string>('');
 
   // Stable intent idempotency counter per provider
   const callCounterRef = useRef<Record<string, number>>({});
@@ -178,6 +184,19 @@ export default function DeskPage() {
     }
   };
 
+  const handleDelay = async (providerId: string, minutes: number = 15) => {
+    try {
+      await fetch('/engine-api/desk/delay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId, minutes })
+      });
+      await fetchDeskState();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to register queue delay');
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 max-w-6xl mx-auto animate-pulse">
@@ -228,6 +247,16 @@ export default function DeskPage() {
               Undo ({remainingSec}s)
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowEmergencyModal(true)}
+            className="text-xs border-danger/40 text-danger hover:bg-danger-light"
+          >
+            <AlertOctagon className="w-3.5 h-3.5 mr-1 text-danger" />
+            + Emergency
+          </Button>
 
           <Button
             variant="primary"
@@ -285,6 +314,25 @@ export default function DeskPage() {
                   <PhoneCall className={`w-3.5 h-3.5 mr-1.5 ${isCalling ? 'animate-bounce' : ''}`} />
                   {isCalling ? 'Calling...' : col.waiting.length > 0 ? `Call Next (${col.waiting[0].formatted_number})` : 'Queue Empty'}
                 </Button>
+
+                <div className="flex items-center justify-between text-[11px] pt-1">
+                  {col.stats.delayMinutes > 0 ? (
+                    <Badge variant="warning" className="text-[10px]">
+                      +{col.stats.delayMinutes}m delay active
+                    </Badge>
+                  ) : (
+                    <span className="text-muted">On schedule</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelay(p.id, 15)}
+                    className="text-muted hover:text-warning flex items-center gap-1 transition-colors font-medium"
+                    title="Add 15 min delay"
+                  >
+                    <Clock className="w-3 h-3" />
+                    +15m Delay
+                  </button>
+                </div>
               </div>
 
               {/* Active / In-Consult Patient */}
@@ -353,13 +401,13 @@ export default function DeskPage() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!activeProvider) return;
+                const targetProvId = walkinProviderId || activeProvider?.provider.id || 'p1';
                 try {
                   await fetch('/engine-api/desk/walkin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      providerId: activeProvider.provider.id,
+                      providerId: targetProvId,
                       name: walkinName,
                       phone: walkinPhone,
                       reason: walkinReason
@@ -394,12 +442,118 @@ export default function DeskPage() {
                 />
               </div>
 
+              {columns.length > 1 && (
+                <div>
+                  <label className="text-xs font-medium text-dark">Assign to Doctor</label>
+                  <select
+                    value={walkinProviderId || activeProvider?.provider.id}
+                    onChange={(e) => setWalkinProviderId(e.target.value)}
+                    className="w-full text-xs p-2 border border-border rounded-[8px] bg-white text-dark mt-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    {columns.map((c) => (
+                      <option key={c.provider.id} value={c.provider.id}>
+                        {c.provider.name} ({c.provider.room})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" size="sm" type="button" onClick={() => setShowWalkinModal(false)}>
                   Cancel
                 </Button>
                 <Button variant="primary" size="sm" type="submit">
                   Issue Token
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Emergency Modal */}
+      {showEmergencyModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-md w-full space-y-4 bg-white p-6 shadow-xl border-danger/30">
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <AlertOctagon className="w-4 h-4 text-danger" />
+                <h3 className="font-bold text-sm text-dark">Issue Emergency Token</h3>
+              </div>
+              <button onClick={() => setShowEmergencyModal(false)} className="text-muted hover:text-dark text-xs">✕</button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const targetProvId = emergencyProviderId || activeProvider?.provider.id || 'p1';
+                try {
+                  await fetch('/engine-api/desk/emergency', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      providerId: targetProvId,
+                      name: emergencyName,
+                      phone: emergencyPhone
+                    })
+                  });
+                  setShowEmergencyModal(false);
+                  setEmergencyName('');
+                  fetchDeskState();
+                } catch (err: any) {
+                  setActionError(err.message || 'Failed to issue emergency token');
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="text-xs font-medium text-dark">Patient Name</label>
+                <Input
+                  value={emergencyName}
+                  onChange={(e) => setEmergencyName(e.target.value)}
+                  placeholder="e.g. Critical Patient"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-dark">Contact Phone</label>
+                <Input
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  placeholder="919810000000"
+                  required
+                />
+              </div>
+
+              {columns.length > 1 && (
+                <div>
+                  <label className="text-xs font-medium text-dark">Assign to Doctor</label>
+                  <select
+                    value={emergencyProviderId || activeProvider?.provider.id}
+                    onChange={(e) => setEmergencyProviderId(e.target.value)}
+                    className="w-full text-xs p-2 border border-border rounded-[8px] bg-white text-dark mt-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    {columns.map((c) => (
+                      <option key={c.provider.id} value={c.provider.id}>
+                        {c.provider.name} ({c.provider.room})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <p className="text-[11px] text-danger bg-danger-light p-2.5 rounded-[6px] border border-danger/20">
+                🚨 Emergency tokens jump ahead of standard queue patients with highest priority.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" size="sm" type="button" onClick={() => setShowEmergencyModal(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" size="sm" type="submit">
+                  Issue Emergency Token
                 </Button>
               </div>
             </form>

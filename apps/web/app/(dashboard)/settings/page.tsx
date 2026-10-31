@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Badge } from '@baari/ui';
-import { Settings, Clock, Users, Key, Save, CheckCircle2 } from 'lucide-react';
+import { Settings, Clock, Users, Key, Save, CheckCircle2, Download, ShieldCheck } from 'lucide-react';
 
 export default function SettingsPage() {
   const [clinicName, setClinicName] = useState('Clinic Workspace');
@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [displayToken, setDisplayToken] = useState('tv-display-default');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/tenant')
@@ -104,6 +105,49 @@ export default function SettingsPage() {
               Rotate Token
             </Button>
           </div>
+        </Card>
+
+        {/* Data Privacy & DPDP Compliance (§8 & §17) */}
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-dark">Data Privacy & DPDP Compliance</h2>
+              <p className="text-xs text-muted">
+                Section 12 DPDP export: download an encrypted JSON bundle of all patients, appointments, and audit events.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await fetch('/engine-api/dpdp/export');
+                  if (res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `baari_dpdp_export_${Date.now()}.json`;
+                    a.click();
+                    setExportNotice('DPDP export downloaded successfully.');
+                    setTimeout(() => setExportNotice(null), 4000);
+                  }
+                } catch {
+                  setExportNotice('Export failed.');
+                }
+              }}
+              className="text-xs"
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Export Organization Data
+            </Button>
+          </div>
+          {exportNotice && (
+            <p className="text-xs text-success font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> {exportNotice}
+            </p>
+          )}
         </Card>
 
         <div className="flex justify-end items-center gap-3">
