@@ -443,7 +443,7 @@ async function fetchRoute(route, opts = {}) {
           crit('B8b. POST /engine-api/desk/walkin returned 200 but missing token');
         }
       } else {
-        crit('B8b. POST /engine-api/desk/walkin failed (§C2)', `Status: ${walkinRes.status}`);
+        crit('B8b. POST /engine-api/desk/walkin failed (§C2)', `Status: ${walkinRes.status} Body: ${walkinRes.text.slice(0, 100)}`);
       }
 
       // 2. Verify patient is in waiting list
